@@ -1,5 +1,25 @@
 # AI Web Form Fill Helper
 
+## Development environment and security review
+
+Install [Nix and devenv](https://devenv.sh/getting-started/), then run project
+commands through the checked-in environment:
+
+```sh
+devenv shell -- npm ci --ignore-scripts
+devenv shell -- npm test
+devenv shell -- npm audit --ignore-scripts
+```
+
+The environment provides Node.js 22, npm, Git, ripgrep, jq, zip, and unzip.
+`devenv.lock` pins the Nix inputs; `package-lock.json` pins npm dependencies.
+Shell entry does not install packages or start an AI server. Agent instructions
+are in [AGENTS.md](AGENTS.md).
+
+Read [SECURITY_AUDIT.md](SECURITY_AUDIT.md) before using personal application
+data. The audit includes confirmed privacy issues and executable reproductions;
+the runtime issues have not been fixed in this checkout.
+
 <p align="center">
   <img src="media/AIWebFillFormHelper.jpg" alt="Extension image">
 </p>
@@ -204,4 +224,3 @@ There is no standard for naming fields, which can complicate the entry of approp
 
 # In Action
 ![Extension in action](media/screen.gif)
-
