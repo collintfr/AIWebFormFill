@@ -31,14 +31,18 @@ remotely executed scripts. Model weights are separate, explicitly downloaded ass
 
 1. Click the extension icon to open Options. Create an empty vault with a strong
    passphrase of at least 12 characters. There is no password recovery.
-2. Enter values and aliases, then save encrypted changes. For example:
-
-   ```json
-   {
-     "Applicant Example": ["fullName", "name"],
-     "applicant@example.test": ["email", "emailAddress"]
-   }
-   ```
+2. Add groups and records in the visual editor, or start with **Add education
+   template**. Enter values and aliases, then save encrypted changes. Create a
+   separate degree record for each qualification, including degrees from the same
+   school. Duplicate nested major records for multiple majors. Advanced JSON is
+   available for editing the same structured draft.
+   The education template covers institution location, study level, degree,
+   GPA/scale, class rank/size, two majors and two minors, and separate attendance
+   and graduation months/years. Awards is a single multiline text field where you
+   can type your awards, honors, and scholarships in your own format.
+   Optional full dates support single date controls.
+   Each record has a colored card with separate main value, additional attributes,
+   and related-details sections. Expand aliases or management controls as needed.
 
 3. Optionally download the local MiniLM model in Options. Public model assets come
    from Hugging Face and its fixed asset hosts, with revision and integrity checks.
@@ -48,11 +52,21 @@ remotely executed scripts. Model weights are separate, explicitly downloaded ass
 4. Approve the destination URL in Options, grant its browser permission, and reload
    the application page. Right-click an empty visible field and choose **Preview
    this field** or **Preview this form**.
-5. Prepare the preview, inspect the destination and proposed values, adjust the
-   selections, and click **Fill approved values**. Form preview covers the selected
-   field's form and frame only. A form-free field gets a single-field preview.
+5. Prepare the preview, assign a saved record to each page section, and explicitly
+   include any nested records. Inspect the proposed values and click **Fill approved
+   values**. Add manual sections for layouts without section markup. Select repeated
+   values individually or explicitly combine them with a separator. Native dropdowns,
+   multiselects, ISO dates, and months are supported; custom widgets remain manual.
+   Form preview covers the selected form, dialog, or semantic group in its frame.
+   An ungrouped form-free field gets a single-field preview.
 6. For an embedded third-party form, approve that frame's destination separately,
    reload the application, and approve the frame again in the preview.
+7. For an inline or modal subform, right-click its Add/Edit control and choose
+   **Preview opening this Add/Edit control**. Inspect and approve opening, choose
+   the revealed scope, then prepare and approve a fresh fill preview. Save the
+   subform yourself. Repeat for another record. Navigation links and submit
+   controls are excluded; other pages/tabs and unsupported controls require manual
+   opening and a new preview.
 
 Focusing a field does nothing automatically. Proposed values stay in the extension
 preview until you approve insertion. Once inserted, the destination page and its
@@ -76,7 +90,10 @@ data are automatically erased when the extension background starts. Restored old
 data is erased again when storage changes. There is no conversion, import, or
 legacy-data control. Enter your profile again in the encrypted vault. If cleanup
 fails, vault operations wait for successful cleanup. **Reset editor** reloads saved
-data; it does not delete it.
+data; it does not delete it. Existing **encrypted flat vaults** convert to an
+Ungrouped record after authentication without being rewritten during unlock.
+Their next explicit save stores the structured profile. Old encrypted backups
+remain supported. This does not convert obsolete plaintext profiles.
 **Clear all personal data** deletes the vault, legacy sync/local profiles, migration
 backups, session metadata, preferences, and model caches, then clears active sessions.
 Revoking a destination removes its logical approval and cancels pending previews.

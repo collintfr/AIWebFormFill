@@ -17,8 +17,15 @@ export function cosineSimilarity(a, b) {
   return aa && bb ? Math.max(-1, Math.min(1, dot / Math.sqrt(aa * bb))) : 0;
 }
 export function exactMatch(metadata, entries) {
-  const tokens = Object.values(cleanMetadata(metadata)).map(normalize).filter(Boolean);
-  return entries.find(entry => entry.aliases.some(alias => tokens.includes(normalize(alias))));
+  const clean = cleanMetadata(metadata);
+  // A month/year pair often shares a label such as "Start Date". Its individual
+  // control name or ID identifies the component more precisely than that label.
+  for (const key of ['name', 'id', 'autocomplete', 'aria-label', 'label']) {
+    const token = normalize(clean[key]); if (!token) continue;
+    const matches = entries.filter(entry => entry.aliases.some(alias => normalize(alias) === token));
+    if (matches.length) return matches.length === 1 ? matches[0] : undefined;
+  }
+  return undefined;
 }
 export function originOf(url) {
   const parsed = new URL(url);

@@ -9,6 +9,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 # Changelog
 
+## Unreleased — structured profiles
+
+- Added a freeform multiline Awards text field to education; container records
+  omit empty main-value sections.
+- Expanded education templates with location, study level, degree, GPA scale,
+  class rank/size, first/second majors and minors, and split month/year dates.
+- Redesigned the editor with hierarchy colors, main-value and related-detail
+  sections, compact attribute grids, and collapsed aliases/management controls.
+- Made exact matching prefer individual control names/IDs over shared labels
+  for split date dropdowns; empty optional attributes are excluded from matching.
+- Added visual groups, repeated records, nested attributes, and an education template.
+- Preserved separate degree/major identities even when school names and values match.
+- Added explicit record-to-section assignments and manual sections in fill previews.
+- Added separately approved inline/modal Add/Edit opening, followed by a fresh fill preview.
+- Added native dropdowns/multiselects, ISO dates/months, and explicit value combination.
+- Kept authenticated encrypted flat vaults/backups compatible through in-memory conversion.
+- Updated the design and privacy review; agent instructions now require design synchronization.
+
 ## [1.29.15] - 2026-03-17 - latest
 
 ### Changed

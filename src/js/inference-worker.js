@@ -32,8 +32,12 @@ self.onmessage = async ({ data }) => {
     // Embed each distinct alias once. Avoid cache thrashing on large profiles.
     let aliases;
     for (const field of data.fields) {
-      const direct = exactMatch(field.metadata, data.entries);
+      const candidates = data.entries.filter(entry => !field.entryIds || field.entryIds.includes(entry.id));
+      if (!candidates.length) continue;
+      const direct = exactMatch(field.metadata, candidates);
       if (direct) { matches.push({ fieldId: field.id, entryId: direct.id, similarity: 1 }); continue; }
+      // Exact collisions must remain explicit choices, even when the model is present.
+      if (candidates.filter(entry => exactMatch(field.metadata, [entry])).length > 1) continue;
       if (!aliases) {
         const unique = [...new Set(data.entries.flatMap(entry => entry.aliases))];
         if (unique.length > 2000) throw new Error('MODEL_PROFILE_LIMIT');
@@ -42,14 +46,19 @@ self.onmessage = async ({ data }) => {
         aliases = data.entries.flatMap(entry => entry.aliases.map(alias => ({ id: entry.id, vector: byAlias.get(alias) })));
       }
       let best = { fieldId: field.id, entryId: '', similarity: 0 };
+      let second = 0;
       for (const text of Object.values(cleanMetadata(field.metadata)).filter(Boolean)) {
         const fieldVector = await vector(text);
         for (const alias of aliases) {
+          if (!candidates.some(entry => entry.id === alias.id)) continue;
           const similarity = cosineSimilarity(fieldVector, alias.vector);
-          if (similarity > best.similarity) best = { fieldId: field.id, entryId: alias.id, similarity };
+          if (similarity > best.similarity) {
+            if (best.entryId !== alias.id) second = best.similarity;
+            best = { fieldId: field.id, entryId: alias.id, similarity };
+          } else if (best.entryId !== alias.id) second = Math.max(second, similarity);
         }
       }
-      matches.push(best);
+      if (best.similarity - second >= 0.05) matches.push(best);
     }
     self.postMessage({ ok: true, matches });
   } catch { self.postMessage({ ok: false, error: 'LOCAL_MATCHING_UNAVAILABLE' }); }

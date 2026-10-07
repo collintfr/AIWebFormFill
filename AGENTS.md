@@ -31,6 +31,9 @@
   Transformers.js runtime and packaged ONNX/WASM assets into `dist/`; load complete
   generated browser packages. Model weights are separately downloaded public assets.
 - See `SECURITY_AUDIT.md` for the reviewed data flows, findings, and limitations.
+- Keep `DESIGN.md` synchronized with the current extension; update it in the same
+  change whenever architecture, data structures, user flows, or security boundaries
+  change.
 
 ## Personal data and security
 

@@ -17,3 +17,64 @@ table { width: 100%; border-collapse: collapse; }
 th, td { text-align: left; vertical-align: top; padding: .6rem .3rem; border-bottom: 1px solid GrayText; overflow-wrap: anywhere; }
 select { max-width: 300px; width: 100%; }
 .destination { overflow-wrap: anywhere; font-weight: 600; }
+#recordEditor {
+  --group-bg: #edf1fc; --group-border: #677ab4;
+  --record-bg: #edf7f2; --record-border: #4f8a72;
+  --nested-bg: #f3eefa; --nested-border: #8970ae;
+  --attribute-bg: #ffffff; --attribute-border: #c3ccd5;
+  --primary-bg: #fff3dd; --primary-border: #b28439;
+  --editor-muted: #4c5b6b; --editor-control: #ffffff;
+}
+#recordEditor .entry-card {
+  min-inline-size: 0; margin: 1.1rem 0; padding: 1rem;
+  border: 1px solid var(--entry-border); border-left: 5px solid var(--entry-border);
+  border-radius: .65rem; background: var(--entry-bg);
+}
+#recordEditor .entry-group { --entry-bg: var(--group-bg); --entry-border: var(--group-border); margin: 1.8rem 0; }
+#recordEditor .entry-record.record-odd { --entry-bg: var(--record-bg); --entry-border: var(--record-border); }
+#recordEditor .entry-record.record-even { --entry-bg: var(--nested-bg); --entry-border: var(--nested-border); }
+#recordEditor .entry-attribute { --entry-bg: var(--attribute-bg); --entry-border: var(--attribute-border); margin: 0; padding: .75rem; }
+#recordEditor .attribute-primary { --entry-bg: var(--primary-bg); --entry-border: var(--primary-border); }
+#recordEditor legend { padding: 0 .5rem; font-weight: 700; font-size: 1.05rem; overflow-wrap: anywhere; max-width: 100%; }
+#recordEditor .entry-header { padding-bottom: .9rem; }
+#recordEditor .entry-header > label { margin-top: .35rem; }
+#recordEditor .entry-kind { display: inline-block; color: var(--editor-muted); text-transform: uppercase; font-size: .75rem; font-weight: 750; letter-spacing: .08em; }
+#recordEditor .entry-section { margin-top: 1rem; padding-top: 1rem; border-top: 1px solid var(--entry-border); }
+#recordEditor .entry-section-title { font-size: 1rem; margin: 0 0 .25rem; }
+#recordEditor .entry-help, #recordEditor .entry-empty { color: var(--editor-muted); font-size: .85rem; margin: .3rem 0 .85rem; }
+#recordEditor .entry-children { margin-top: 1.6rem; padding-top: 1.2rem; border-top-width: 3px; }
+#recordEditor .attribute-list { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: .9rem; margin-bottom: .9rem; }
+#recordEditor .attribute-wide { grid-column: 1 / -1; }
+#recordEditor .attribute-fields { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr); gap: .75rem; align-items: start; }
+#recordEditor .attribute-fields label { margin-top: 0; font-size: .85rem; }
+#recordEditor input, #recordEditor textarea { background: var(--editor-control); color: CanvasText; border: 1px solid var(--attribute-border); border-radius: .3rem; }
+#recordEditor textarea { min-height: 2.8rem; font-family: inherit; resize: vertical; }
+#recordEditor summary { cursor: pointer; color: var(--editor-muted); font-size: .85rem; padding: .25rem 0; }
+#recordEditor .entry-manage, #recordEditor .attribute-aliases { margin-top: .35rem; }
+#recordEditor .entry-manage .actions { margin: .4rem 0; }
+#recordEditor .entry-manage button { font-size: .8rem; padding: .3rem .5rem; }
+#recordEditor .entry-footer { margin: 1rem 0 0; padding-top: .8rem; border-top: 1px solid var(--entry-border); }
+#recordEditor .entry-footer button { font-size: .85rem; }
+#recordEditor .editor-additions { padding: 1rem; border: 2px dashed var(--group-border); border-radius: .65rem; background: var(--group-bg); }
+#recordEditor button:focus-visible, #recordEditor summary:focus-visible, #recordEditor input:focus-visible, #recordEditor textarea:focus-visible { outline: 3px solid var(--group-border); outline-offset: 2px; }
+@media (prefers-color-scheme: dark) {
+  #recordEditor {
+    --group-bg: #202a43; --group-border: #8ba0d6;
+    --record-bg: #1c352c; --record-border: #77b49a;
+    --nested-bg: #30263f; --nested-border: #b49bd8;
+    --attribute-bg: #22272e; --attribute-border: #596673;
+    --primary-bg: #3b301e; --primary-border: #d0ac67;
+    --editor-muted: #c5cfdc; --editor-control: #171b21;
+  }
+}
+@media (max-width: 720px) {
+  #recordEditor .attribute-list { grid-template-columns: minmax(0, 1fr); }
+  #recordEditor .entry-card { padding: .65rem; }
+}
+@media (max-width: 420px) {
+  #recordEditor .attribute-fields { grid-template-columns: minmax(0, 1fr); }
+  #recordEditor .entry-card { padding: .45rem; }
+}
+#fields select { min-width: 150px; }
+#fields p { font-size: .85rem; }
+#sections { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: .6rem; }

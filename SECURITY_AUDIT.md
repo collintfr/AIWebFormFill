@@ -2,6 +2,45 @@
 
 ## Version 2 remediation review
 
+### Structured-record and guided-subform privacy review
+
+The extension now encrypts group/record names, stable attribute identities, nested
+records, values, and aliases together under the existing authenticated envelope.
+Existing encrypted flat vaults convert only after authentication, in memory;
+unlock does not rewrite the vault. Save/import failures preserve the previous
+stored envelope. Obsolete plaintext cleanup policy is unchanged.
+
+Record assignments constrain matching and background value resolution. Repeated
+attributes require explicit selection/combination; learned aliases attach to an
+attribute ID, never a value string. Workers receive names/aliases and opaque IDs,
+without profile values, record names, or paths. No new persistent private cache,
+permission, dependency, or network destination is introduced.
+
+New untrusted metadata consists of bounded semantic section/control labels,
+native control types, and native option labels/values. None is HTML-executed.
+Content scripts retain exact section, field, option, and opener references/checks.
+The preview owns private record names and proposed values. Opening is a distinct
+one-use approval, carries no profile values, and discovers only newly eligible
+fields in the selected document/frame. Discovery is bounded to ten seconds and
+ends on cancellation or document exit. Lock/revocation cancels pending operations.
+The user separately approves insertion and manually saves/submits the subform.
+
+Control labels cannot establish what arbitrary page JavaScript will do. Even an
+Add/Edit control can have other side effects, so opening is deliberate and its
+page-controlled nature is disclosed. Native submit and navigation controls are
+excluded. Custom comboboxes, new-page flows, and delayed multi-step subforms need
+manual handling. Existing field/form/frame isolation and stale-document checks
+remain required. Synthetic unit and Firefox cases cover these added boundaries;
+they do not establish compatibility with every application portal.
+
+The expanded education template and editor styling introduce no schema, storage,
+permission, or network changes. Newly entered attributes use the same encrypted
+vault and explicit fill approvals. Empty optional fields are excluded from matching.
+Exact matching now prefers individual control names/IDs over shared labels to
+distinguish split month/year controls; all metadata remains untrusted, collisions
+remain unapproved, and destination disclosure still requires preview approval.
+Template and browser fixtures use synthetic records, not data from user screenshots.
+
 The historical audit below applies to version **1.29.15**. The working tree now
 implements a **2.0.0** redesign; it does not change the previously published package
 or store listing. Current flow and limitations are documented in [DESIGN.md](DESIGN.md).

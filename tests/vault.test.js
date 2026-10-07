@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 import { Vault, validateEnvelope, validateProfile } from '../src/js/vault.js';
+import { flattenProfile, emptyProfile } from '../src/js/profile.js';
 const passphrase = 'synthetic vault passphrase';
 function fixture() {
   const data = {};
@@ -21,7 +22,7 @@ describe('Encrypted local vault', () => {
     vault.lock(); expect(vault.key).toBeNull(); expect(vault.profile).toBeNull();
     await expect(vault.save({})).rejects.toThrow('LOCKED');
     await vault.unlock(passphrase);
-    expect(vault.profile).toEqual({ 'Applicant Example': ['fullName'] });
+    expect(flattenProfile(vault.profile).entries[0]).toMatchObject({ value: 'Applicant Example', aliases: ['fullName'] });
   });
   it('rejects wrong passwords, altered ciphertext and nonce tampering', async () => {
     const { vault, data } = fixture();
@@ -49,7 +50,7 @@ describe('Encrypted local vault', () => {
     const before = structuredClone(data.encryptedVault);
     storage.set.mockRejectedValueOnce(new Error('disk failure'));
     await expect(vault.save({ 'Applicant Example': ['name'] })).rejects.toThrow();
-    expect(data.encryptedVault).toEqual(before); expect(vault.profile).toEqual({});
+    expect(data.encryptedVault).toEqual(before); expect(vault.profile).toEqual(emptyProfile());
     await expect(vault.import(before, 'incorrect passphrase')).rejects.toThrow();
     expect(data.encryptedVault).toEqual(before);
     await vault.replace({}, 'a different synthetic passphrase'); vault.lock();
@@ -69,6 +70,23 @@ describe('Encrypted local vault', () => {
     expect(() => validateProfile({ fullName: 'Applicant Example' })).toThrow('INVALID_PROFILE');
     expect(() => validateProfile({ value: ['x'.repeat(257)] })).toThrow();
     const prototypeKey = JSON.parse('{"__proto__":["name"]}');
-    expect(validateProfile(prototypeKey)['__proto__']).toEqual(['name']);
+    expect(flattenProfile(validateProfile(prototypeKey)).entries[0].value).toBe('__proto__');
+  });
+  it('converts authenticated old encrypted vaults in memory without rewriting on unlock', async () => {
+    const { vault, data, storage } = fixture(); await vault.create(passphrase);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const ciphertext = await crypto.subtle.encrypt({ name: 'AES-GCM', iv,
+      additionalData: new TextEncoder().encode('AIWebFormFill:vault:1') }, vault.key,
+    new TextEncoder().encode(JSON.stringify({ 'Synthetic School': ['school'] })));
+    data.encryptedVault = { ...data.encryptedVault, iv: Buffer.from(iv).toString('base64'), ciphertext: Buffer.from(ciphertext).toString('base64') };
+    const oldEnvelope = structuredClone(data.encryptedVault); storage.set.mockClear(); vault.lock(); await vault.unlock(passphrase);
+    expect(storage.set).not.toHaveBeenCalled(); expect(await vault.export()).toEqual(oldEnvelope);
+    expect(flattenProfile(vault.profile).entries[0].value).toBe('Synthetic School');
+    const converted = structuredClone(vault.profile);
+    storage.set.mockRejectedValueOnce(new Error('disk failure'));
+    await expect(vault.save(converted)).rejects.toThrow(); expect(await vault.export()).toEqual(oldEnvelope);
+    await vault.save(converted); vault.lock(); await vault.unlock(passphrase); expect(vault.profile).toEqual(converted);
+    const imported = fixture(); await imported.vault.import(oldEnvelope, passphrase);
+    expect(flattenProfile(imported.vault.profile).entries[0].value).toBe('Synthetic School');
   });
 });

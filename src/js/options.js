@@ -2,11 +2,13 @@ import { api, send, showError, downloadJson } from './ui.js';
 import { originOf, sitePattern } from './utils.js';
 import { downloadModel, modelReady, cacheName, downloadOrigins } from './model-store.js';
 import { validateEnvelope } from './vault.js';
+import { createProfileEditor } from './profile-editor.js';
 const $ = id => document.getElementById(id);
 const base = api.runtime.getURL('');
 let currentEpoch;
 let download;
-function clearEditor() { $('profile').value = ''; $('editor').disabled = true; }
+const profileEditor = createProfileEditor($('recordEditor'), $('profile'), $('advanced'), error => showError(error, $('message')));
+function clearEditor() { profileEditor.clear(); $('editor').disabled = true; }
 function password(confirm = false) {
   const value = $('passphrase').value;
   const confirmation = $('confirmation').value;
@@ -24,7 +26,7 @@ async function refresh(load = false) {
   $('lock').disabled = !status.unlocked;
   $('changePassphrase').disabled = !status.unlocked;
   if (load && status.unlocked) {
-    $('profile').value = JSON.stringify(await send('profile'), null, 2);
+    profileEditor.load(await send('profile'));
     $('editor').disabled = false;
   }
   if (document.activeElement !== $('threshold')) $('threshold').value = status.preferences.threshold;
@@ -48,7 +50,7 @@ on('lock', async () => { clearEditor(); password(); await send('lock'); await re
 on('changePassphrase', async () => { await send('changePassphrase', { passphrase: password(true) }); await refresh(true); $('message').textContent = 'Passphrase changed.'; });
 on('save', async () => {
   let profile;
-  try { profile = JSON.parse($('profile').value); } catch { throw new Error('INVALID_PROFILE'); }
+  try { profile = profileEditor.read(); } catch { throw new Error('INVALID_PROFILE'); }
   await send('save', { profile }); await refresh(true); $('message').textContent = 'Encrypted changes saved.';
 });
 on('reset', () => refresh(true));

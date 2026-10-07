@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createController } from '../src/background.js';
+import { validateProfile, educationGroup, duplicate } from '../src/js/profile.js';
 const listener = () => ({ addListener: vi.fn() });
 function area(data) {
   return { get: vi.fn(async keys => keys === null ? { ...data } : Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map(key => [key, data[key]]))),
@@ -15,8 +16,8 @@ function fixture(seed = {}) {
       onMessage: listener(), onInstalled: listener(), onStartup: listener(), openOptionsPage: vi.fn() },
     storage: { local: area(local), sync: area(sync), session: area(session), onChanged: listener() },
     tabs: { sendMessage: vi.fn(async (id, message) => message.action === 'collect'
-      ? { origin: message.origin, token: 'document-a', fields: [{ id: 'field-a', metadata: { name: 'fullName', 'data-private': 'private' } }] }
-      : { filled: message.items.map(item => item.fieldId) }), onRemoved: listener() },
+      ? { origin: message.origin, token: 'document-a', sections: [{ id: 'section-a', label: 'Form' }], fields: [{ id: 'field-a', sectionId: 'section-a', type: 'text', metadata: { name: 'fullName', 'data-private': 'private' } }] }
+      : { filled: message.items?.map(item => item.fieldId) ?? [] }), onRemoved: listener() },
     windows: { create: vi.fn(async () => {}) },
     permissions: { contains: vi.fn(async () => true), onRemoved: listener() },
     scripting: { registerContentScripts: vi.fn(async () => {}), unregisterContentScripts: vi.fn(async () => {}) },
@@ -26,7 +27,7 @@ function fixture(seed = {}) {
   if (seed.noSession) delete api.storage.session;
   const controller = createController(api);
   // Synthetic unlocked fixture; cryptographic persistence is tested separately.
-  controller.vault.key = {}; controller.vault.profile = { 'Zebra Example': ['lastName'], 'Applicant Example': ['fullName'] };
+  controller.vault.key = {}; controller.vault.profile = validateProfile({ 'Zebra Example': ['lastName'], 'Applicant Example': ['fullName'] });
   const ui = { id: 'fixture', url: 'moz-extension://fixture/preview.html' };
   const call = (action, details = {}, sender = ui) => controller.handle({ action, ...details }, sender);
   async function preview(frame = false) {
@@ -67,7 +68,7 @@ describe('Background authorization and frame isolation', () => {
   it('inserts exactly the selected value by stable ID and consumes the approval once', async () => {
     const app = fixture(); const { requestId, result } = await app.preview();
     const selected = result.entries.find(entry => entry.value === 'Applicant Example');
-    const selections = [{ fieldId: 'field-a', entryId: selected.id, similarity: 1 }];
+    const selections = [{ fieldId: 'field-a', entryId: selected.id, recordId: selected.recordId, nestedRecordIds: [], similarity: 1 }];
     await app.call('fill', { requestId, selections });
     expect(app.api.tabs.sendMessage).toHaveBeenLastCalledWith(42, expect.objectContaining({
       action: 'apply', token: 'document-a', items: [{ fieldId: 'field-a', value: 'Applicant Example' }]
@@ -76,7 +77,7 @@ describe('Background authorization and frame isolation', () => {
   });
   it('blocks low confidence, unknown values, duplicate targets and changed destinations', async () => {
     const app = fixture(); const { requestId, result } = await app.preview();
-    const selected = { fieldId: 'field-a', entryId: result.entries[0].id, similarity: 0.01 };
+    const selected = { fieldId: 'field-a', entryId: result.entries[0].id, recordId: result.entries[0].recordId, nestedRecordIds: [], similarity: 0.01 };
     await expect(app.call('fill', { requestId, selections: [selected] })).rejects.toThrow('INVALID_SELECTION');
     selected.similarity = 1; selected.entryId = 'missing';
     await expect(app.call('fill', { requestId, selections: [selected] })).rejects.toThrow('INVALID_SELECTION');
@@ -172,5 +173,70 @@ describe('Background authorization and frame isolation', () => {
     listener({ action: 'collectPreview', requestId }, { id: 'fixture', url: 'moz-extension://fixture/preview.html' }, reply);
     await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({ ok: false, error: 'OPERATION_FAILED' }));
     for (const log of logs) { expect(JSON.stringify(log.mock.calls)).not.toContain('Applicant Example'); log.mockRestore(); }
+  });
+  it('rejects attributes outside the assigned record and learns by attribute identity', async () => {
+    const app = fixture(); const collection = educationGroup(); const first = collection.records[0];
+    first.attributes[0].value = 'Synthetic School'; const second = duplicate(first); collection.records.push(second);
+    app.controller.vault.profile = { version: 2, groups: [collection] };
+    const { requestId, result } = await app.preview();
+    const selection = { fieldId: 'field-a', entryIds: [first.attributes[0].id], recordId: second.id, nestedRecordIds: [], similarity: 1 };
+    await expect(app.call('fill', { requestId, selections: [selection] })).rejects.toThrow('INVALID_SELECTION');
+    selection.recordId = first.id;
+    app.controller.vault.save = vi.fn(async profile => { app.controller.vault.profile = profile; });
+    await app.call('fill', { requestId, selections: [selection], learn: true });
+    expect(app.controller.vault.profile.groups[0].records[0].attributes[0].aliases).toContain('fullName');
+    expect(app.controller.vault.profile.groups[0].records[1].attributes[0].aliases).not.toContain('fullName');
+    expect(result.records.filter(record => record.parentId === null)).toHaveLength(2);
+    expect(result.records.some(record => record.parentId === first.id)).toBe(true);
+  });
+  it('enforces explicit combination and prevents stale model choices from another degree', async () => {
+    const app = fixture(); const { requestId, result } = await app.preview();
+    const selection = { fieldId: 'field-a', entryIds: result.entries.map(entry => entry.id), recordId: result.records[0].id, nestedRecordIds: [], similarity: 1 };
+    await expect(app.call('fill', { requestId, selections: [selection] })).rejects.toThrow('INVALID_SELECTION');
+    selection.separator = '; '; await app.call('fill', { requestId, selections: [selection] });
+    expect(app.api.tabs.sendMessage).toHaveBeenLastCalledWith(42, expect.objectContaining({ items: [{ fieldId: 'field-a', value: 'Zebra Example; Applicant Example' }] }), { frameId: 0 });
+  });
+  it('opens only after separate approval and validates revealed scope selection', async () => {
+    const app = fixture(); await app.controller.start({ menuItemId: 'openSubform' }, { id: 42, url: 'https://trusted.example' });
+    const requestId = [...app.controller.pending.keys()][0];
+    await expect(app.call('openSubform', { requestId, approveOpen: true })).rejects.toThrow('INVALID_SELECTION');
+    app.api.tabs.sendMessage.mockResolvedValueOnce({ origin: 'https://trusted.example', token: 'document-a', label: 'Add education' });
+    await app.call('inspectOpener', { requestId });
+    await expect(app.call('openSubform', { requestId })).rejects.toThrow('INVALID_SELECTION');
+    app.api.tabs.sendMessage.mockResolvedValueOnce({ origin: 'https://trusted.example', token: 'document-a', scopes: [{ id: 'new', label: 'Education', count: 2 }] });
+    await app.call('openSubform', { requestId, approveOpen: true });
+    await expect(app.call('openSubform', { requestId, approveOpen: true })).rejects.toThrow('INVALID_SELECTION');
+    await expect(app.call('collectPreview', { requestId, scopeId: 'other' })).rejects.toThrow('INVALID_SELECTION');
+    const result = await app.call('collectPreview', { requestId, scopeId: 'new' }); expect(result.fields).toHaveLength(1);
+    expect(JSON.stringify(app.api.tabs.sendMessage.mock.calls)).not.toContain('Applicant Example');
+  });
+  it('a lock interrupts a pending opening and cancels page observation', async () => {
+    const app = fixture(); await app.controller.start({ menuItemId: 'openSubform' }, { id: 42, url: 'https://trusted.example' });
+    const requestId = [...app.controller.pending.keys()][0];
+    app.api.tabs.sendMessage.mockResolvedValueOnce({ origin: 'https://trusted.example', token: 'document-a', label: 'Add education' }); await app.call('inspectOpener', { requestId });
+    let resolveOpen; app.api.tabs.sendMessage.mockImplementationOnce(() => new Promise(resolve => { resolveOpen = resolve; }));
+    const opening = app.call('openSubform', { requestId, approveOpen: true }); await vi.waitFor(() => expect(resolveOpen).toBeTypeOf('function'));
+    await app.call('lock'); resolveOpen({ origin: 'https://trusted.example', token: 'document-a', scopes: [{ id: 'new', label: 'Education', count: 1 }] });
+    await expect(opening).rejects.toThrow('PREVIEW_EXPIRED');
+    expect(app.api.tabs.sendMessage).toHaveBeenCalledWith(42, expect.objectContaining({ action: 'cancel', requestId }), { frameId: 0 });
+  });
+  it('cancel bypasses the mutation queue to interrupt a pending opening', async () => {
+    const app = fixture(); await app.controller.start({ menuItemId: 'openSubform' }, { id: 42, url: 'https://trusted.example' });
+    const requestId = [...app.controller.pending.keys()][0];
+    app.api.tabs.sendMessage.mockResolvedValueOnce({ origin: 'https://trusted.example', token: 'document-a', label: 'Add education' }); await app.call('inspectOpener', { requestId });
+    let resolveOpen; app.api.tabs.sendMessage.mockImplementationOnce(() => new Promise(resolve => { resolveOpen = resolve; }));
+    const opening = app.call('openSubform', { requestId, approveOpen: true }); await vi.waitFor(() => expect(resolveOpen).toBeTypeOf('function'));
+    await app.call('cancelPreview', { requestId }); expect(app.controller.pending.size).toBe(0);
+    resolveOpen({ error: 'STALE_DOCUMENT' }); await expect(opening).rejects.toThrow('PREVIEW_EXPIRED');
+  });
+  it('a lock while reading preview settings prevents returning decrypted records', async () => {
+    const app = fixture(); await app.controller.start({ menuItemId: 'previewForm' }, { id: 42, url: 'https://trusted.example' });
+    const requestId = [...app.controller.pending.keys()][0]; let reads = 0; let resolveSettings;
+    const get = app.api.storage.local.get.getMockImplementation();
+    app.api.storage.local.get.mockImplementation(key => key === 'preferences' && ++reads === 2
+      ? new Promise(resolve => { resolveSettings = resolve; }) : get(key));
+    const collecting = app.call('collectPreview', { requestId }); await vi.waitFor(() => expect(resolveSettings).toBeTypeOf('function'));
+    await app.call('lock'); resolveSettings({ preferences: app.local.preferences });
+    await expect(collecting).rejects.toThrow('PREVIEW_EXPIRED'); expect(app.controller.vault.profile).toBeNull();
   });
 });

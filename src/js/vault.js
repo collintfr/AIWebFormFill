@@ -1,23 +1,10 @@
+import { validateProfile } from './profile.js';
+export { validateProfile } from './profile.js';
 export const VAULT_KEY = 'encryptedVault';
 const iterations = 600000;
 const aad = new TextEncoder().encode('AIWebFormFill:vault:1');
 const encode = bytes => btoa(String.fromCharCode(...bytes));
 const decode = text => Uint8Array.from(atob(text), c => c.charCodeAt(0));
-
-export function validateProfile(profile) {
-  if (!profile || typeof profile !== 'object' || Array.isArray(profile) ||
-      Object.getPrototypeOf(profile) !== Object.prototype || Object.keys(profile).length > 1000) {
-    throw new Error('INVALID_PROFILE');
-  }
-  for (const [value, aliases] of Object.entries(profile)) {
-    if (!value || value.length > 20000 || !Array.isArray(aliases) || aliases.length > 100 ||
-        aliases.some(alias => typeof alias !== 'string' || !alias.trim() || alias.length > 256)) {
-      throw new Error('INVALID_PROFILE');
-    }
-  }
-  if (JSON.stringify(profile).length > 1000000) throw new Error('INVALID_PROFILE');
-  return structuredClone(profile);
-}
 
 export function validateEnvelope(envelope) {
   if (!envelope || envelope.format !== 'AIWebFormFill-encrypted' || envelope.version !== 1 ||
@@ -80,7 +67,7 @@ export class Vault {
     const key = await derive(passphrase, salt);
     const profile = await decrypt(envelope, key);
     this.check(epoch);
-    this.key = key; this.salt = salt; this.profile = profile;
+    this.key = key; this.salt = salt; this.profile = validateProfile(profile);
   }
   async create(passphrase) {
     const epoch = this.epoch;
@@ -90,14 +77,15 @@ export class Vault {
   }
   async replace(profile, passphrase) {
     const epoch = this.epoch;
+    const clean = validateProfile(profile);
     const salt = crypto.getRandomValues(new Uint8Array(16));
     const key = await derive(passphrase, salt);
-    const envelope = await encrypt(profile, key, salt);
+    const envelope = await encrypt(clean, key, salt);
     await decrypt(envelope, key);
     this.check(epoch);
     await this.storage.set({ [VAULT_KEY]: envelope });
     this.check(epoch);
-    this.key = key; this.salt = salt; this.profile = validateProfile(profile);
+    this.key = key; this.salt = salt; this.profile = clean;
   }
   async save(profile) {
     if (!this.unlocked) throw new Error('LOCKED');

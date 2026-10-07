@@ -9,9 +9,12 @@
 <label for="passphrase">Passphrase</label><input id="passphrase" type="password" autocomplete="off" minlength="12" maxlength="1024">
 <label for="confirmation">Confirm passphrase for create, change, or import</label><input id="confirmation" type="password" autocomplete="off" maxlength="1024">
 <div class="actions"><button id="create">Create empty vault</button><button id="unlock">Unlock</button><button id="lock">Lock</button><button id="changePassphrase">Change passphrase</button></div>
-<fieldset id="editor" disabled><legend>Saved values and aliases</legend>
-<p>Use each value as a JSON key, with an array of field aliases. Example: <code>{"Applicant Example": ["fullName", "name"]}</code></p>
-<label for="profile">Profile JSON</label><textarea id="profile" rows="12" spellcheck="false" autocomplete="off"></textarea>
+<fieldset id="editor" disabled><legend>Groups, records, and attributes</legend>
+<p>Create one record for each degree or job. Identical school names can belong to separate records. Use nested records for majors and other repeated details. Attribute names and aliases match page fields. Changes are saved only when you click Save.</p>
+<p>The education template includes location, study level, degree, GPA and scale, class rank/size, two majors, two minors, separate start/end/graduation months and years, and an Awards text field. Type all your awards directly into that field, using multiple lines if needed. Enter month names for dropdowns; optional full dates use YYYY-MM-DD. Include the related records you want in each fill preview. Main values, additional attributes, and related details have separate sections; expand Field aliases or Manage only when needed.</p>
+<label><input id="advanced" type="checkbox"> Advanced JSON view</label>
+<div id="recordEditor"></div>
+<div hidden><label for="profile">Profile JSON (version 2)</label><textarea id="profile" rows="18" spellcheck="false" autocomplete="off"></textarea></div>
 <div class="actions"><button id="save">Save encrypted changes</button><button id="reset">Reset editor to saved data</button><button id="export">Export encrypted backup</button></div>
 </fieldset>
 <p>Encrypted backups contain your encrypted profile. Plaintext files are not supported. Import replaces the current vault after authentication.</p>
