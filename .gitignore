@@ -17,6 +17,8 @@ issue*.md
 *review.md
 
 node_modules/
+dist/
+.browser-test/
 coverage/
 .vitest-cache/
 .claude/

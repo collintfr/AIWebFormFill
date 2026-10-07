@@ -1,0 +1,12 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>AI Form Fill — Preview</title><link rel="stylesheet" href="css/options.css"></head>
+<body><main><h1>Review before filling</h1>
+<p id="destination" class="destination"></p><p id="frameNotice"></p>
+<p>Only the values you approve below will be inserted. After insertion, the destination page and its scripts can read them.</p>
+<p id="message" role="status" aria-live="polite"></p>
+<div class="actions"><button id="approveSite" hidden>Approve destination</button><button id="collect">Prepare preview</button><button id="options">Open vault options</button></div>
+<table><thead><tr><th>Field</th><th>Value</th><th>Similarity</th><th>Approve</th><th>Clipboard</th></tr></thead><tbody id="fields"></tbody></table>
+<label><input id="learn" type="checkbox"> Learn mappings for values successfully filled</label>
+<div class="actions"><button id="fill" disabled>Fill approved values</button><button id="cancel">Cancel</button></div>
+<script type="module" src="js/preview.js"></script></main></body></html>

@@ -1,5 +1,75 @@
 # Security and privacy audit
 
+## Version 2 remediation review
+
+The historical audit below applies to version **1.29.15**. The working tree now
+implements a **2.0.0** redesign; it does not change the previously published package
+or store listing. Current flow and limitations are documented in [DESIGN.md](DESIGN.md).
+
+| Finding | Implemented remediation |
+| --- | --- |
+| A01 | Focus proposals removed; values stay in extension previews until explicit insertion approval; threshold enforced |
+| A02 | Optional approved sites; collection scoped to selected form/frame; separate embedded-origin approval; document tokens and exact element checks |
+| A03 | Passphrase-encrypted local vault; no profile sync or persisted key; explicit locking |
+| A04 | Encrypted-only backups; obsolete plaintext automatically purged at startup and when restored; clear-all covers local/sync/session storage, caches, and active state |
+| A05 | Local Transformers.js inference; allowlisted/bounded metadata; pinned integrity-checked setup assets; bundled runtime; no AI endpoints or remote inference fallback |
+| A06 | Private payload logs removed; fixed error codes only; personal values removed from context-menu labels |
+| A07 | Preview choices use shared stable entry IDs; numeric menu indexing removed |
+| A08 | Test/build/runtime dependencies intentionally upgraded and locked; audit rerun required for each release |
+| A09 | README, help, privacy policy and design rewritten; corrected store text prepared separately, not published |
+
+### Explicit privacy review
+
+Storage no longer writes personal values or aliases to sync or persistent plaintext
+caches. The key and decrypted profile exist only in extension memory; suspension
+may relock the vault. Profile encryption does not protect an unlocked compromised
+browser. Encrypted-only imports authenticate before replacement. Obsolete plaintext
+profiles, migration backups, alias caches, old settings, and sync/session contents
+are erased automatically before vault operations, without reading their contents.
+Storage changes trigger another cleanup if old data returns. This intentional
+destructive upgrade policy is explicitly requested by the user: there is no legacy
+retention, conversion, or manual deletion feature. Cleanup preserves the encrypted
+vault, current preferences, and public model cache; failures block vault operations
+until cleanup succeeds. Previously exported files and other devices remain outside
+the cleanup's reach.
+
+There are no automatic suggestions or configured inference destinations. Public
+model setup downloads expose ordinary request/IP information to fixed asset hosts,
+with no profile or page metadata, credentials, or referrer. Inference reads verified
+local assets; executable runtime code is packaged. Matching metadata can still be
+private and remains local. Model caches contain only public model assets.
+
+Host access is optional. Browser host patterns can cover multiple ports, so the
+controller and content script enforce exact approved origins as well. Each operation
+targets a frame, selected form, and document token; embedded destinations need
+separate approval. Accepted values are deliberately disclosed to destination scripts.
+
+The old vulnerable-behavior reproductions have been replaced by security-property
+tests. Real Firefox validation uses fresh profiles and synthetic forms only; it
+does not inspect an installed personal profile. Chrome packaging is built but
+real Chrome behavior and store publication remain outside this remediation.
+
+### Remediation validation
+
+Validated with Nix-provided Firefox **155.0.1**, geckodriver **0.37.1**, Node.js
+**22.23.2**, and Vitest **5.0.3**. All **38 regression tests pass**. Locked installation
+with lifecycle scripts disabled, full npm audit (**zero vulnerabilities**), both
+browser package builds, `devenv test`, and `git diff --check` pass. `devenv.lock`
+remains unchanged; Firefox/geckodriver were intentionally added to the existing
+environment and npm tooling/runtime dependencies were intentionally updated.
+
+The executable Firefox smoke test passed real trusted context selection, preview
+secrecy before acceptance, selected-form filling, unrelated-frame isolation,
+separate cross-origin-frame approval, navigation rejection, permission revocation,
+vault locking, encrypted export, and full deletion. It downloaded the pinned public
+model and ran actual WASM embeddings with Firefox offline. Reloading the background
+discarded the key and pending operations while preserving the encrypted vault.
+Automatic cleanup also removed synthetic old local/sync/session data during the
+restart, preserved the encrypted vault byte-for-byte and kept current preferences.
+Firefox 128 is the declared minimum; this browser run validated Firefox 155.0.1.
+
+## Historical version 1 audit
+
 Reviewed on 2026-10-06. Source commit:
 `a3ce27aae6b4a8d42cff25c6d3d0e1b64ffce9a0`; extension version 1.29.15.
 

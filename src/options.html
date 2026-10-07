@@ -1,156 +1,32 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <link rel="stylesheet" href="css/options.css" />
-    <title>AI Web Form Fill Helper Options</title>
-</head>
-<body>
-    <header>
-        <h1><span class="options-title">AI Web Form Fill Helper Option</span> <span class="js-version"></span></h1>
-    </header>
-    <hr/>
-    <main class="container">
-        <section class="main">
-            <div class="help-container">
-                <img id="colseHelp" src="img/close.svg" alt="Close" title="Close" class="help-close">
-                <h2 class="help-title"></h2>
-                <hr>
-                <p class="help-content"></p>
-            </div>
-            <form id="theForm">
-                <div class="form-container">
-                    <div class="row">
-                        <input class="numeric-settings" type="number" name="theshold" id="threshold" placeholder="value between 0 and 1" min="0" max="1" step="0.1">
-                        <label class="field-label" for="threshold">Probability threshold</label>
-                        <img src="img/help-circle.svg" class="help-icon">&nbsp;</img>
-                    </div>
-                    <div class="col">
-                        <div class="row">
-                            <label class="col-label" for="embeddings">Embeddings API endpoint</label>
-                            <img src="img/help-circle.svg" class="help-icon">&nbsp;</img>
-                        </div>
-                        <div class="row row-left">
-                            <select name="embeddings" id="embeddings">
-                                <option value="">Select provider</option>
-                                <!-- <option value="http://localhost:11434/api/embeddings">Ollama</option>
-                                <option value="http://localhost:1234/v1/embeddings">LM Studio</option>
-                                <option value="http://localhost:8080/">Llamafile</option> -->
-                            </select>
-                            <!-- <input class="text-settings" type="text" name="embeddings" id="embeddings" placeholder="http://localhost:1234/v1/embeddings"> -->
-                            <img src="img/edit2.svg" class="model-icon-button" data-action="edit" alt="Edit current" title="Edit current">
-                            <img src="img/add.svg" class="model-icon-button" data-action="add" alt="Add to list" title="Add to list">
-                            <img src="img/remove.svg" class="model-icon-button" data-action="remove" alt="Remove from list" title="Remove from list">
-                            <img src="img/remove-all.svg" class="model-icon-button" data-action="removeAll" alt="Remove all" title="Clear the list">
-                            <img src="img/a-z.svg" class="model-icon-button" data-action="asc" alt="Soft Asc" title="Soft list Asc">
-                            <img src="img/z-a.svg" class="model-icon-button" data-action="desc" alt="Soft Desc" title="Soft List Desc">
-                        </div>
-                    </div>
-
-                    <div id="modelsRow" class="row obscured">
-                        <select name="modelList" id="modelList"></select>
-                        <img src="img/refresh.svg" id="refreshModels" class="model-icon-button" alt="Refresh models" title="Refresh models list">
-                        <label class="field-label" for="modelList">Models list</label>
-                    </div>
-
-                    <div class="row">
-                        <input class="chck-box" type="checkbox" name="calcOnLoad" id="calcOnLoad" />
-                        <label class="field-label" for="calcOnLoad">Calculate similarities on focus</label>
-                        <img src="img/help-circle.svg" class="help-icon">&nbsp;</img>
-                    </div>
-                    <div class="row">
-                        <input class="chck-box" type="checkbox" name="autoLearn" id="autoLearn" />
-                        <label class="field-label" for="autoLearn">Auto-learn field mappings</label>
-                        <img src="img/help-circle.svg" class="help-icon">&nbsp;</img>
-                    </div>
-                    <div class="col">
-                        <div class="row">
-                            <label for="jsonInput" class="block col-label">Form Fields Values</label>
-                            <img src="img/help-circle.svg" class="help-icon">&nbsp;</img>
-                        </div>
-                        <textarea id="jsonInput" rows="10" placeholder="Enter settings in JSON format..."></textarea>
-                    </div>
-                    <div class="form-buttons">
-                        <button type="button" class="save">Save</button>
-                        <button type="button" class="cancel">Reset</button>
-                        <span style="margin: 0 10px;"></span>
-                        <button type="button" class="export">Export</button>
-                        <button type="button" class="import">Import</button>
-                        <input type="file" id="importFile" accept=".json" style="display: none;">
-                    </div>
-                </div>
-            </form>
-            <div id="message-ribbon" class="message-ribbon invisible">Message goes here</div>
-        </section>
-
-    </main>
-    <script src="js/options.js"></script>
-
-    <dialog id="dlgAddEmbeddings">
-        <div class="dialog-title">API provider</div>
-        <div class="dialog-body">
-            <div class="row">
-                <label for="dlgName" class="dialog-label">Name:</label>
-                <input type="text" name="dlgName" id="dlgName" class="text-settings" >
-            </div>
-            <div class="row">
-                <label for="dlgUrl" class="dialog-label">URL:</label>
-                <input type="text" name="dlgUrl" id="dlgUrl" class="text-settings" >
-            </div>
-        </div>
-        <div class="dialog-footer">
-            <button id="dlgAdd" class="dialog-button">Add</button>
-            <button id="dlgCancel" class="dialog-button">Cancel</button>
-        </div>
-    </dialog>
-
-    <template id="embeddingsHelpTemplate">
-        <div>
-            <p><a href="https://en.wikipedia.org/wiki/Localhost">Read about localhost if needed</a></p>
-            <p>Available Local APIs. Manage your list with the buttons next to the dropdown. You can add, edit, remove, sort, or clear all items. Hover over the button to reveal the action.</p>
-            <p>When Ollama is chosen as the API provider, a list of its supported models automatically populates.</p>
-            <p>If you're useing LM Studio, <a href="https://lmstudio.ai/docs/local-server">here</a> is a bit more technical information</p>
-            <p>Alternatively any tool that uses <a href="https://platform.openai.com/docs/api-reference">OpenAI's API format</a> could be used, even external one (if it is installed as a docker image or located on another near by machine).</p>
-            <p>Usually the application that provided the service should have comprehensive documentation how to set up the environment.
-                Once done, enter here that port your preferable application is useing. The value is required and its default vaue is 1234.</p>
-        </div>
-    </template>
-    <template id="probabilityHelpTemplate">
-        <div>
-            <p><a href="https://www.ibm.com/topics/word-embeddings">Read comprehensive information on the topic.</a></p>
-            <p>Simply put an calculated comparison below this value will be considered as invalid or not a match.</p>
-            <p> The lower the value, the bigger will be the tollerance. A grater value will search for a closer and more strict match.</p>
-            <p>You may experiment to find the best match for you.</p>
-        </div>
-    </template>
-    <template id="calcSimilaritiesOnFocus">
-        <div>
-            <p>When a field receives focus, similarities will be calculated if this checkbox is checked.</p>
-            <p>If similarities are calculated, a suitable value will be proposed, which could be further accepted or ignored.</p>
-            <p>When checked, this box enables automatic similarity calculation and suggestion on field focus, mimicking the behavior of the 'Fill this field' context menu.</p>
-        </div>
-    </template>
-    <template id="formFieldValuesHelp">
-        <div>
-            <p>These are the values that will be used to fill a form.</p>
-            <p>AAll values are stored in JSON format (look <a href="https://en.wikipedia.org/wiki/JSON" title="Wikipedia">here</a> and
-                <a href="https://www.w3schools.com/whatis/whatis_json.asp" title="W3Schools">here</a> for details).
-                    In JSON, the left side (keys) represents the form fields, while the right side stores the corresponding values you want to fill those fields with.</p>
-                <p>Both left and right sides must be surrounded by single or double quotes.</p>
-                <p><b>Note:</b>Duplication might be needed for fields with distinct names/labels but the same expected value.</p>
-                <p>For instance: <i>post code</i> and <i>zip</i> won't be recognised perhaps and requiring the same value, while <i>post code</i> and <i>zip code</i>
-                    will be treated as similar and won't be necessary to add another key/value pair.
-                </p>
-        </div>
-    </template>
-    <template id="autoLearnHelp">
-        <div>
-            <p>When enabled, the extension automatically remembers field mappings when you fill forms.</p>
-            <p>When you manually select a value from the context menu, the extension will associate
-               that value with the field name, improving future matches.</p>
-            <p>When disabled, use "Fill and map this field" to explicitly teach the extension.</p>
-        </div>
-    </template>
-</body>
-</html>
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width">
+<title>AI Form Fill — Options</title><link rel="stylesheet" href="css/options.css"></head>
+<body><main>
+<h1>AI Form Fill</h1><p>Preview first. Fill only what you approve. Matching runs on your device.</p>
+<p id="message" role="status" aria-live="polite"></p>
+<section><h2>Encrypted vault</h2><p id="vaultStatus"></p>
+<p>Your passphrase is never saved. Use at least 12 characters. There is no password recovery. Closing the browser or suspending the background may require unlocking again.</p>
+<label for="passphrase">Passphrase</label><input id="passphrase" type="password" autocomplete="off" minlength="12" maxlength="1024">
+<label for="confirmation">Confirm passphrase for create, change, or import</label><input id="confirmation" type="password" autocomplete="off" maxlength="1024">
+<div class="actions"><button id="create">Create empty vault</button><button id="unlock">Unlock</button><button id="lock">Lock</button><button id="changePassphrase">Change passphrase</button></div>
+<fieldset id="editor" disabled><legend>Saved values and aliases</legend>
+<p>Use each value as a JSON key, with an array of field aliases. Example: <code>{"Applicant Example": ["fullName", "name"]}</code></p>
+<label for="profile">Profile JSON</label><textarea id="profile" rows="12" spellcheck="false" autocomplete="off"></textarea>
+<div class="actions"><button id="save">Save encrypted changes</button><button id="reset">Reset editor to saved data</button><button id="export">Export encrypted backup</button></div>
+</fieldset>
+<p>Encrypted backups contain your encrypted profile. Plaintext files are not supported. Import replaces the current vault after authentication.</p>
+<label for="importFile">Encrypted backup to import</label><input id="importFile" type="file" accept=".json"><button id="import">Import encrypted backup</button>
+<div class="actions"><button id="clearAll" class="danger">Clear all personal data</button></div>
+<p>Deletion covers extension storage and caches. Earlier files, clipboard history, browser backups, and copies on other synced devices remain outside this extension.</p>
+</section>
+<section><h2>Local matching model</h2>
+<p>A fixed quantized MiniLM embedding model matches fields to your aliases. Setup downloads public model files from Hugging Face and its asset hosts. No profile or page metadata is sent. Matching then works offline.</p>
+<p id="modelStatus" role="status"></p>
+<div class="actions"><button id="downloadModel">Download model</button><button id="cancelDownload">Cancel download</button><button id="removeModel">Remove model</button></div>
+<label for="threshold">Minimum similarity (0–1)</label><input id="threshold" type="number" min="0" max="1" step="0.05" value="0.5"><button id="saveThreshold">Save threshold</button>
+</section>
+<section><h2>Approved destinations</h2>
+<p>Approve each destination before use, then reload its page and right-click an empty visible field. Embedded third-party forms need separate destination permission and approval in each preview.</p>
+<label for="site">Site URL</label><input id="site" type="url" placeholder="https://application.example"><button id="approveSite">Approve site</button>
+<ul id="sites"></ul>
+</section></main><script type="module" src="js/options.js"></script></body></html>

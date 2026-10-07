@@ -9,7 +9,7 @@
     npm.install.enable = false;
   };
 
-  packages = [ pkgs.git pkgs.ripgrep pkgs.jq pkgs.zip pkgs.unzip ];
+  packages = [ pkgs.git pkgs.ripgrep pkgs.jq pkgs.zip pkgs.unzip pkgs.firefox pkgs.geckodriver ];
 
   # Keep package-manager artifacts in the ignored project state directory.
   env.npm_config_cache = "${builtins.toString ./.}/.devenv/npm-cache";

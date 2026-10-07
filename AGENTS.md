@@ -27,8 +27,9 @@
 - Runtime extension code is in `src/`; `Firefox/manifest.json` and
   `Chrome/manifest.json` are browser-specific manifest variants, not complete
   extension builds. Keep relevant manifest changes consistent.
-- Tests use Vitest and jsdom in `tests/`. There is no extension bundler or runtime
-  npm dependency; npm dependencies are development tools only.
+- Tests use Vitest and jsdom in `tests/`. `scripts/build.mjs` bundles the pinned
+  Transformers.js runtime and packaged ONNX/WASM assets into `dist/`; load complete
+  generated browser packages. Model weights are separately downloaded public assets.
 - See `SECURITY_AUDIT.md` for the reviewed data flows, findings, and limitations.
 
 ## Personal data and security

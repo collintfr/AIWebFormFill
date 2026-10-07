@@ -1,226 +1,110 @@
-# AI Web Form Fill Helper
+# AI Form Fill Helper
 
-## Development environment and security review
+A Firefox-first browser extension that matches saved values to form fields on
+your device and lets you review them before filling. Version 2 replaces automatic
+suggestions, synced plaintext profiles, and AI server configuration with an
+encrypted local vault and offline Transformers.js embeddings.
 
-Install [Nix and devenv](https://devenv.sh/getting-started/), then run project
-commands through the checked-in environment:
+See [DESIGN.md](DESIGN.md) for the overall application flow and component boundaries,
+[privacy policy](others/privacy.md) for data handling, and
+[security audit](SECURITY_AUDIT.md) for the original findings and remediation review.
+
+## Build and load
+
+Use the checked-in Nix environment; shell entry does not install dependencies.
 
 ```sh
 devenv shell -- npm ci --ignore-scripts
+devenv shell -- npm run build
+```
+
+In Firefox, open `about:debugging`, choose **This Firefox → Load Temporary Add-on**,
+and select `dist/firefox/manifest.json`. Firefox 128 or newer is required. The build
+also creates `dist/firefox.zip`, `dist/chrome/`, and `dist/chrome.zip`. Browser-specific
+manifests are templates; load the complete generated package, not `src/` or `Firefox/`.
+Firefox is the tested target; Chrome packaging is maintained but is not browser-validated.
+
+The build bundles the pinned Transformers.js/ONNX runtime locally. There are no
+remotely executed scripts. Model weights are separate, explicitly downloaded assets.
+
+## Use
+
+1. Click the extension icon to open Options. Create an empty vault with a strong
+   passphrase of at least 12 characters. There is no password recovery.
+2. Enter values and aliases, then save encrypted changes. For example:
+
+   ```json
+   {
+     "Applicant Example": ["fullName", "name"],
+     "applicant@example.test": ["email", "emailAddress"]
+   }
+   ```
+
+3. Optionally download the local MiniLM model in Options. Public model assets come
+   from Hugging Face and its fixed asset hosts, with revision and integrity checks.
+   No saved values, aliases, or page metadata are sent in those requests. After
+   setup, inference runs offline on CPU/WASM. Exact aliases and manual selection
+   work without the model.
+4. Approve the destination URL in Options, grant its browser permission, and reload
+   the application page. Right-click an empty visible field and choose **Preview
+   this field** or **Preview this form**.
+5. Prepare the preview, inspect the destination and proposed values, adjust the
+   selections, and click **Fill approved values**. Form preview covers the selected
+   field's form and frame only. A form-free field gets a single-field preview.
+6. For an embedded third-party form, approve that frame's destination separately,
+   reload the application, and approve the frame again in the preview.
+
+Focusing a field does nothing automatically. Proposed values stay in the extension
+preview until you approve insertion. Once inserted, the destination page and its
+scripts can read them. Fields that become populated, hidden, moved, or relabeled
+are skipped. Navigation invalidates the document token. Previews expire after two minutes.
+
+The vault stays unlocked in background memory until Lock, browser exit, or
+background-context eviction. Chrome service-worker suspension may relock earlier.
+No key or passphrase is persisted. Automatic learning defaults off; enable learning
+for an individual fill only when you want successful mappings saved. Clipboard
+copying is explicit and can leave copies in clipboard history.
+
+## Backups and deletion
+
+Import and export accept only the encrypted vault format. Import authenticates the
+backup before replacing the vault. Keep its passphrase safe; an old encrypted backup
+continues to need its old passphrase after a passphrase change.
+
+Version 1 plaintext profiles, migration backups, old alias caches, and sync/session
+data are automatically erased when the extension background starts. Restored old
+data is erased again when storage changes. There is no conversion, import, or
+legacy-data control. Enter your profile again in the encrypted vault. If cleanup
+fails, vault operations wait for successful cleanup. **Reset editor** reloads saved
+data; it does not delete it.
+**Clear all personal data** deletes the vault, legacy sync/local profiles, migration
+backups, session metadata, preferences, and model caches, then clears active sessions.
+Revoking a destination removes its logical approval and cancels pending previews.
+
+Deletion cannot erase earlier exports, clipboard history, another synced device,
+captured logs, or browser/profile backups. Encryption protects stored data; an
+unlocked or compromised browser can still expose it. Protect the device and passphrase.
+
+## Validation
+
+Run shell invocations sequentially in this checkout:
+
+```sh
 devenv shell -- npm test
 devenv shell -- npm audit --ignore-scripts
+devenv shell -- npm run build
+devenv shell -- npm run test:firefox
+devenv shell -- npm run test:firefox -- --model
+devenv shell -- sh -c 'XDG_CACHE_HOME="$PWD/.devenv/xdg-cache" devenv test'
 ```
 
-The environment provides Node.js 22, npm, Git, ripgrep, jq, zip, and unzip.
-`devenv.lock` pins the Nix inputs; `package-lock.json` pins npm dependencies.
-Shell entry does not install packages or start an AI server. Agent instructions
-are in [AGENTS.md](AGENTS.md).
-
-Read [SECURITY_AUDIT.md](SECURITY_AUDIT.md) before using personal application
-data. The audit includes confirmed privacy issues and executable reproductions;
-the runtime issues have not been fixed in this checkout.
-
-<p align="center">
-  <img src="media/AIWebFillFormHelper.jpg" alt="Extension image">
-</p>
-
-This is a small project aimed at facilitating the filling of web forms. There may be situations, such as filling out applications during your job search 😉, where you need to repeatedly fill in the same information again and again, like ordering food or goods. It's there that this helper was born.
-
-No doubt, there are many well-sophisticated tools and solutions out there that may satisfy a wide range of needs.
-
-This one is different. It was created with privacy in mind. Your data is stored in browser extension storage and can optionally sync across your signed-in browser instances through the browser's built-in sync mechanism. This allows you to reuse your form data across devices without manual export/import. What fields will be filled by this tool is entirely up to you.
-
-### And the best part - it is free, [FOSS](https://en.wikipedia.org/wiki/Free_and_open-source_software), and will remain such.
-
-However, I must issue a word of caution: avoid storing sensitive information like credit cards, passwords, etc., as any flaw in browser security may put your data at risk.
-
-#### Download Links
-||||
-|------|------|------|
-| <img src="media/ff32.png" title="Firefox extension" alt="Firefox extension" width="32" height="32" /> | Get Firefox addon | [here](https://addons.mozilla.org/en-US/firefox/addon/ai-form-fill-helper/) |
-| <img src="media/chrome.png" title="Chrome extension" alt="Chrome extension" width="32" height="32" /> | For Chrome extension | [here](https://chromewebstore.google.com/detail/ai-form-fill-helper/hfcoicpedjbfhfiaamajpnaabjdkhjcj) |
-
-# Firefox Permission Note
-
-![Firefox permissions](media/FF_permissions.png)
-
-The latest Firefox require explicit user permision to access data. To enable this permission on you need to open burger menu (`≡`) and from there find and click `Add-ons and themes`. Locate the `AI Form Fill Helper` extension and click on the name. The middle tab is `Permissions` - click to open. Enable the `Access your data for all websites` option. Refresh the page if you had it open prior to making this change. The screenshot above shows where it is located.
-
-
-### What this project is NOT
-
-This is not a form hacking tool, nor is it intended to be. Its purpose is solely to enhance user experience by eliminating mundane, repetitive tasks. Responsibility for proper usage rests with the user.
-
-### The Forms
-
-Web forms are often targets of various attacks, from spammers to hackers. This leads to a constant cycle of updated attacks and defenses. Therefore, one might find forms that do not accept, block, or otherwise prevent this tool from working, and this is normal. If you encounter such issues, [report it here](https://github.com/ivostoykov/AIWebFormFill/issues)
-
----
-
-The latest changes are available [here](CHANGELOG.md)
-
----
-
-## Pre-requisits
-This extension works with a local AI. This means that you need AI installed. Also, it requires a local POST API endpoint to communicate with. You could use any tool at your convenience. Here I'll explain my preferable environment settings. Some of the options are:
-
-- [LM Studio](https://lmstudio.ai/)
-- [Ollama](https://ollama.com)
-
-### API server
-Probably the easier way to make all work is to use [LM Studio](https://lmstudio.ai/) (Ctrl+click to open in a new tab). Download and set it for your OS.
-This extension uses embeddings endpoint so it doesn't require great resources.
-
-Once [LM Studio](https://lmstudio.ai/) is set, download a MiniLM gulf (ie *All-MiniLM-L6-v2-Embedding-GGUF*). You need to search for it from within [LM Studio](https://lmstudio.ai/) and download it from there. Once on your machine, it will appear in the embeddings model list, where you have to activate it. And you're done; you're ready to fill out some other form.
-
-![LM Studio embeding MiniLm](media/miniLm.png)
-
-For [Ollama](https://ollama.com), keep reading [the next section](#models).
-
-### Models
-
-The model calculates similarity by comparing the option values to the meanings of fields in the form, using the provided descriptions and system properties. For a deeper understanding, refer to [this link](https://www.ibm.com/topics/embedding) or search your preferred resources.
-
-Depending on the model, there may be misunderstandings or inappropriate calculations due to:
-
-- **Contextual Differences:** The embeddings might have been trained on a dataset where, for example, "Phone" is not similar to "tel" and "mobile".
-- **Model Limitations:** The embedding model might not have captured the semantic similarity effectively.
-- **Data Representation:** The embeddings are high-dimensional and may represent nuances not immediately apparent in a simple comparison.
-
-**Note:** My personal preference is the **MiniLM L6 V2** model. However, experimenting with different models is beneficial to understand their limits.
-
-For [LM Studio](https://lmstudio.ai/), search for the mentioned model and download it.
-
-For [Ollama](https://ollama.com), use the following command in a terminal (if installed as per the documentation):
-
-```
-ollama pull all-minilm:l6-v2
-```
-
----
-
-## Installation
-Install the extension from the [Download Links](#download-links) section. Alternatively clone this repo and install it in Developer mode, you should know how, if you take this path.
-
-**Note:** Reload the page if you need to use it immediately on current tab.
-
-## Usage
-
-
-If `Calculate similarities on focus` (see [Options](#options) below) is enabled, the extension will automatically suggest values as you focus on form fields. The suggestion appears in the field's placeholder text with instructions on how to apply it.
-
-![Auto Calculations](media/autoInAction.gif)
-
-**To apply an auto-suggestion:**
-- Press `Enter` or `Tab` to accept the suggested value and fill the field
-- The suggestion only appears when the field is empty and a matching value is found
-
-**Keyboard shortcuts:**
-- `Ctrl+Shift+Enter` - Fill the entire form at once
-
-**Context menu:**
-Installing this extension adds a context menu accessible by right-clicking on any form field. You can toggle auto-suggestions on/off from the context menu, and access `Options` to define your form field values. (see [Options](#options))
-
-Right-click on a form field and you will see the main context menu.
-
-![Main context menu](media/mainContextMenu.png)
-
----
-
-### SubMenus
-![Extension submenues](media/submenus.png)
-
-Top three menus are self-explanatory, I believe.
-
-* _Show form field metadata_
-
-This menu will show the `id`s and `name`s for the fields that are considered as suitable to be filled.
-
-![submenu Show form field metadata](media/html.png)
-
-It's helpful to know which fields are good for filling out. The extension will also show why a field might not get filled—usually, it's because there's a poor match between the field's metadata and the info you've provided. This can give you a clue about what extra details to include in the options.
-
-To fill a form properly, you have to provide some data, don't you? This is what the last menu and the next section are for.
-
-### Turn auto proposal On/Off
-![Auto Proposal](media/autoProp.png)
-
-*Note:* This will turn it `on` or `off` only until the page is changed or reloaded.
-To make the change permenant use the [Options](#options) page.
-
-### Insert data manually
-![alt text](media/manual.png)
-
-The [Form data](#form-data) values will be listed in this submenu, allowing to bypass the proposal and insert the value directly in the element having the focus.
-
-# Options
-![Extension options](media/options.png)
-
-Use circled question marks for a quick help or ask a quesion [here](https://github.com/ivostoykov/AIWebFormFill/issues).
-
-## Embeddings endpoint API
-
-### Ollama
-
-[Ollama](https://ollama.com/) embeddings documentation is [here](https://ollama.com/blog/embedding-models).
-
-If you followed the installation instructions and have it successfully set up, then you only need to add a suitable model listed in the [documentation](https://ollama.com/blog/embedding-models). For example:
-
-```
-ollama pull mxbai-embed-large
-```
-
-Then you need to set the API endpoint and choose that model in the [Options](#options) page.
-
-### Llamafile
-
-[Llamafile](https://github.com/Mozilla-Ocho/llamafile) embeddings documentation is [here](https://docs.llamaindex.ai/en/stable/examples/embeddings/llamafile/).
-
-It describes a few simple steps to set it up and run the server locally:
-
-```
-# Start the model server. Listens at http://localhost:8080 by default.
-./TinyLlama-1.1B-Chat-v1.0.Q5_K_M.llamafile --server --nobrowser --embedding
-```
-
-Do not forget to set it as default embedding end point in the [Options](#options) page.
-
-### LM Studio
-
-In [LM Studio](https://lmstudio.ai/)  the full URL is given in the server log:
-
-![LMStudio endpoint](media/embeddings_endpoint.png)
-
-For other tools, like Ollama, please check their documentation.
-
-## Form data
-
-Below is an example data and the format it is expected to be. Note that left and right parts are in quotes. (I know you know but to be sure).
-
-You can add, change, or manipulate this data in any way that serves your needs best. If you want to remove it, replace it with `{}` and save.
-
-```
-{
-    "address1": "Some Ave",
-    "country": "The Country",
-    "email": "JohnDow@mail.com",
-    "firstName": "John",
-    "fullName": "John Dow",
-    "lastName": "Dow",
-    "tel": "123456789",
-    "town": "The City"
-}
-```
-
-### Notes about the data
-
-There is no standard for naming fields, which can complicate the entry of appropriate values. What appears on the screen might not always be the input field typically used. It might be useful to duplicate some values. For instance, you might encounter labels like 'Fill Name' or 'First & Last Name', among others. If these fields are not correctly filled, consider adding them to the options like this:
-
-```
-    "fullName": "John Dow",
-    "FirstLastName": "John Dow",
-```
-
-
-# In Action
-![Extension in action](media/screen.gif)
+The Firefox smoke test uses a fresh temporary profile and synthetic forms. Its
+privileged driver controls only that test profile, grants test permissions, and
+invokes the extension's native context menu. `--model` explicitly downloads the
+public pinned model into the temporary profile and runs actual local inference.
+No UI server or AI service is started. Unit tests cover runtime behavior rather
+than asserting vulnerable behavior or obsolete source-code shapes.
+
+To intentionally review and update model asset hashes, use
+`devenv shell -- node scripts/pin-model.mjs`; this is never part of installation or
+the normal build. Review the model revision, licensing, and generated diff first.

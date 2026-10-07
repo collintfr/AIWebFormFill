@@ -1,59 +1,33 @@
-export function isLocalOrSecureEndpoint(urlString){
-    try {
-        const url = new URL(urlString);
-        const hostname = url.hostname.toLowerCase();
-
-        const isLocalhost = hostname === 'localhost' ||
-                          hostname === '127.0.0.1' ||
-                          hostname === '::1' ||
-                          hostname === '[::1]' ||
-                          hostname.startsWith('192.168.') ||
-                          hostname.startsWith('10.') ||
-                          /^172\.(1[6-9]|2[0-9]|3[0-1])\./.test(hostname);
-
-        const isSecure = url.protocol === 'https:';
-
-        return { isLocal: isLocalhost, isSecure, hostname, protocol: url.protocol };
-    } catch (e) {
-        return { isLocal: false, isSecure: false, hostname: '', protocol: '' };
-    }
+export const normalize = text => String(text ?? '').toLowerCase().replace(/[^\p{L}\p{N}]/gu, '');
+export const metadataKeys = ['name', 'id', 'autocomplete', 'label', 'aria-label'];
+export function cleanMetadata(raw) {
+  const result = {};
+  for (const key of metadataKeys) {
+    if (typeof raw?.[key] === 'string') result[key] = raw[key].slice(0, 256);
+  }
+  return result;
 }
-
-export function cosineSimilarity(vecA, vecB) {
-    if (!Array.isArray(vecA) || !Array.isArray(vecB)) {
-        return 0;
-    }
-
-    let dotProduct = 0;
-    let normA = 0;
-    let normB = 0;
-    for (let i = 0; i < vecA.length; i++) {
-        if (!vecA[i] || !vecB[i]) { break; }
-        dotProduct += vecA[i] * vecB[i];
-        normA += vecA[i] * vecA[i];
-        normB += vecB[i] * vecB[i];
-    }
-    return dotProduct / (Math.sqrt(normA) * Math.sqrt(normB));
+export function cosineSimilarity(a, b) {
+  if (!a?.length || a.length !== b?.length) return 0;
+  let dot = 0, aa = 0, bb = 0;
+  for (let i = 0; i < a.length; i++) {
+    if (!Number.isFinite(a[i]) || !Number.isFinite(b[i])) return 0;
+    dot += a[i] * b[i]; aa += a[i] * a[i]; bb += b[i] * b[i];
+  }
+  return aa && bb ? Math.max(-1, Math.min(1, dot / Math.sqrt(aa * bb))) : 0;
 }
-
-export function isOldFormat(data) {
-    return Object.values(data).some(v => !Array.isArray(v));
+export function exactMatch(metadata, entries) {
+  const tokens = Object.values(cleanMetadata(metadata)).map(normalize).filter(Boolean);
+  return entries.find(entry => entry.aliases.some(alias => tokens.includes(normalize(alias))));
 }
-
-export function convertToNewFormat(oldData) {
-    const newData = {};
-    for (const [field, value] of Object.entries(oldData)) {
-        if (Array.isArray(value)) { continue; }
-
-        if (!newData[value]) {
-            newData[value] = new Set();
-        }
-        newData[value].add(field);
-    }
-
-    for (const key in newData) {
-        newData[key] = Array.from(newData[key]);
-    }
-
-    return newData;
+export function originOf(url) {
+  const parsed = new URL(url);
+  if (!['http:', 'https:'].includes(parsed.protocol) || parsed.username || parsed.password) {
+    throw new Error('UNSUPPORTED_SITE');
+  }
+  return parsed.origin;
+}
+export function sitePattern(origin) {
+  const url = new URL(originOf(origin));
+  return `${url.protocol}//${url.hostname}/*`;
 }

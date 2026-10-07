@@ -1,270 +1,176 @@
-import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { readFileSync } from 'fs';
-import { join } from 'path';
-
-describe('Context menu initialization gate (real execution)', () => {
-  let contextMenuClickHandler;
-  let initCalled;
-  let storageData;
-
-  beforeEach(() => {
-    initCalled = false;
-    storageData = {
-      settings: {
-        threshold: 0.7,
-        embeddings: [{ value: 'http://localhost:11434', text: 'Ollama', selected: true }],
-        model: 'test-model'
-      },
-      AIFillForm: {},
-      staticEmbeddings: {}
-    };
-
-    global.chrome.storage.sync.get = vi.fn((keys, callback) => {
-      const result = Array.isArray(keys)
-        ? keys.reduce((acc, key) => ({ ...acc, [key]: storageData[key] }), {})
-        : storageData;
-      if (callback) callback(result);
-      return Promise.resolve(result);
-    });
-
-    global.chrome.storage.local.get = vi.fn((keys, callback) => {
-      const result = Array.isArray(keys)
-        ? keys.reduce((acc, key) => ({ ...acc, [key]: storageData[key] }), {})
-        : storageData;
-      if (callback) callback(result);
-      return Promise.resolve(result);
-    });
-
-    global.chrome.tabs.sendMessage = vi.fn().mockResolvedValue({
-      name: 'testField',
-      id: 'field1',
-      placeholder: 'Test'
-    });
-
-    const backgroundCode = readFileSync(join(process.cwd(), 'src/background.js'), 'utf-8');
-
-    const initRegex = /async function init\(tab\)\s*\{[\s\S]*?initCompleted = true;\s*\}/;
-    const initMatch = backgroundCode.match(initRegex);
-    expect(initMatch).toBeTruthy();
-    expect(initMatch[0]).toContain('initCompleted = true');
-
-    const contextMenuRegex = /chrome\.contextMenus\.onClicked\.addListener\(async \(info, tab\) => \{[\s\S]*?\}\);/;
-    const match = backgroundCode.match(contextMenuRegex);
-    expect(match).toBeTruthy();
-
-    contextMenuClickHandler = match[0];
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { createController } from '../src/background.js';
+const listener = () => ({ addListener: vi.fn() });
+function area(data) {
+  return { get: vi.fn(async keys => keys === null ? { ...data } : Object.fromEntries((Array.isArray(keys) ? keys : [keys]).map(key => [key, data[key]]))),
+    set: vi.fn(async values => Object.assign(data, values)),
+    remove: vi.fn(async keys => { for (const key of Array.isArray(keys) ? keys : [keys]) delete data[key]; }),
+    clear: vi.fn(async () => { for (const key of Object.keys(data)) delete data[key]; }) };
+}
+function fixture(seed = {}) {
+  const local = { preferences: { sites: ['https://trusted.example', 'https://frame.example'], threshold: 0.8 }, ...seed.local };
+  const sync = { ...seed.sync }; const session = { ...seed.session };
+  const api = {
+    runtime: { id: 'fixture', getURL: path => `moz-extension://fixture/${path}`, sendMessage: vi.fn(async () => {}),
+      onMessage: listener(), onInstalled: listener(), onStartup: listener(), openOptionsPage: vi.fn() },
+    storage: { local: area(local), sync: area(sync), session: area(session), onChanged: listener() },
+    tabs: { sendMessage: vi.fn(async (id, message) => message.action === 'collect'
+      ? { origin: message.origin, token: 'document-a', fields: [{ id: 'field-a', metadata: { name: 'fullName', 'data-private': 'private' } }] }
+      : { filled: message.items.map(item => item.fieldId) }), onRemoved: listener() },
+    windows: { create: vi.fn(async () => {}) },
+    permissions: { contains: vi.fn(async () => true), onRemoved: listener() },
+    scripting: { registerContentScripts: vi.fn(async () => {}), unregisterContentScripts: vi.fn(async () => {}) },
+    contextMenus: { create: vi.fn(), removeAll: vi.fn(async () => {}), onClicked: listener() }, action: { onClicked: listener() }
+  };
+  if (seed.cleanupFailure) api.storage.sync.clear.mockRejectedValue(new Error('Synthetic storage failure'));
+  if (seed.noSession) delete api.storage.session;
+  const controller = createController(api);
+  // Synthetic unlocked fixture; cryptographic persistence is tested separately.
+  controller.vault.key = {}; controller.vault.profile = { 'Zebra Example': ['lastName'], 'Applicant Example': ['fullName'] };
+  const ui = { id: 'fixture', url: 'moz-extension://fixture/preview.html' };
+  const call = (action, details = {}, sender = ui) => controller.handle({ action, ...details }, sender);
+  async function preview(frame = false) {
+    await controller.start({ menuItemId: 'previewForm', frameId: frame ? 3 : 0, frameUrl: frame ? 'https://frame.example/form' : undefined }, { id: 42, url: 'https://trusted.example/form' });
+    const requestId = [...controller.pending.keys()].at(-1);
+    const result = await call('collectPreview', { requestId, approveFrame: frame });
+    return { requestId, result };
+  }
+  return { api, controller, local, sync, session, call, preview };
+}
+describe('Background authorization and frame isolation', () => {
+  beforeEach(() => { globalThis.caches = { keys: vi.fn(async () => ['model-cache']), delete: vi.fn(async () => true) }; });
+  it('rejects personal-data requests from pages, content scripts, other extensions and spoofed URLs', async () => {
+    const app = fixture();
+    for (const sender of [{ id: 'fixture', url: 'https://trusted.example/options.html' },
+      { id: 'fixture', url: 'file:///options.html' }, { id: 'other', url: 'moz-extension://fixture/options.html' },
+      { id: 'fixture', url: 'moz-extension://other/options.html' }, { id: 'fixture', url: 'moz-extension://fixture/background.js' }]) {
+      await expect(app.call('profile', {}, sender)).rejects.toThrow('UNAUTHORIZED');
+      await expect(app.call('fillAutoProposal', {}, sender)).rejects.toThrow('UNAUTHORIZED');
+    }
+    expect(app.api.tabs.sendMessage).not.toHaveBeenCalled();
   });
-
-  it('verifies init gate exists in context menu handler', () => {
-    expect(contextMenuClickHandler).toContain('requiresInit');
-    expect(contextMenuClickHandler).toContain('!initCompleted');
-    expect(contextMenuClickHandler).toContain('await init(tab)');
+  it('collects from the selected frame, with metadata only, and sends no proposals to the page', async () => {
+    const app = fixture(); const { result } = await app.preview(true);
+    expect(app.api.tabs.sendMessage).toHaveBeenCalledWith(42, expect.objectContaining({ action: 'collect', origin: 'https://frame.example', scope: 'form' }), { frameId: 3 });
+    expect(result.fields[0].metadata).toEqual({ name: 'fullName' });
+    expect(JSON.stringify(app.api.tabs.sendMessage.mock.calls)).not.toContain('Applicant Example');
+    expect(result.entries.find(entry => entry.value === 'Applicant Example').aliases).toEqual(['fullName']);
   });
-
-  it('verifies data-dependent actions are gated', () => {
-    expect(contextMenuClickHandler).toContain('fillthisform');
-    expect(contextMenuClickHandler).toContain('fillthisfield');
-    expect(contextMenuClickHandler).toContain('copyToClipboard');
-    expect(contextMenuClickHandler).toContain('fillAndCopyToClipboard');
-    expect(contextMenuClickHandler).toContain('fillAndMapField');
+  it('requires separate frame approval and current site permission', async () => {
+    const app = fixture();
+    await app.controller.start({ frameId: 3, frameUrl: 'https://frame.example', menuItemId: 'previewField' }, { id: 42, url: 'https://trusted.example' });
+    const requestId = [...app.controller.pending.keys()][0];
+    await expect(app.call('collectPreview', { requestId })).rejects.toThrow('FRAME_APPROVAL_REQUIRED');
+    app.api.permissions.contains.mockResolvedValue(false);
+    await expect(app.call('collectPreview', { requestId, approveFrame: true })).rejects.toThrow('PERMISSION_REQUIRED');
   });
-
-  it('verifies value_* pattern is checked for initialization', () => {
-    expect(contextMenuClickHandler).toContain('/^value_/i.test(info.menuItemId)');
-    expect(contextMenuClickHandler).toMatch(/requiresInit[\s\S]*?value_/);
+  it('inserts exactly the selected value by stable ID and consumes the approval once', async () => {
+    const app = fixture(); const { requestId, result } = await app.preview();
+    const selected = result.entries.find(entry => entry.value === 'Applicant Example');
+    const selections = [{ fieldId: 'field-a', entryId: selected.id, similarity: 1 }];
+    await app.call('fill', { requestId, selections });
+    expect(app.api.tabs.sendMessage).toHaveBeenLastCalledWith(42, expect.objectContaining({
+      action: 'apply', token: 'document-a', items: [{ fieldId: 'field-a', value: 'Applicant Example' }]
+    }), { frameId: 0 });
+    await expect(app.call('fill', { requestId, selections })).rejects.toThrow('PREVIEW_EXPIRED');
   });
-
-  it('verifies init gate precedes all case statements', () => {
-    const initGateIndex = contextMenuClickHandler.indexOf('if (requiresInit && !initCompleted)');
-    const switchIndex = contextMenuClickHandler.indexOf('switch (info.menuItemId)');
-    expect(initGateIndex).toBeGreaterThan(-1);
-    expect(switchIndex).toBeGreaterThan(-1);
-    expect(initGateIndex).toBeLessThan(switchIndex);
+  it('blocks low confidence, unknown values, duplicate targets and changed destinations', async () => {
+    const app = fixture(); const { requestId, result } = await app.preview();
+    const selected = { fieldId: 'field-a', entryId: result.entries[0].id, similarity: 0.01 };
+    await expect(app.call('fill', { requestId, selections: [selected] })).rejects.toThrow('INVALID_SELECTION');
+    selected.similarity = 1; selected.entryId = 'missing';
+    await expect(app.call('fill', { requestId, selections: [selected] })).rejects.toThrow('INVALID_SELECTION');
+    selected.entryId = result.entries[0].id;
+    await expect(app.call('fill', { requestId, selections: [selected, selected] })).rejects.toThrow('INVALID_SELECTION');
+    app.api.tabs.sendMessage.mockResolvedValueOnce({ origin: 'https://attacker.example', token: 'changed', fields: [] });
+    await expect(app.call('collectPreview', { requestId })).rejects.toThrow('INVALID_FIELDS');
   });
-});
-
-describe('Clipboard feedback (real execution)', () => {
-  let getAndProcessClickedElementCode;
-
-  beforeEach(() => {
-    const backgroundCode = readFileSync(join(process.cwd(), 'src/background.js'), 'utf-8');
-    const functionRegex = /async function getAndProcessClickedElement\([\s\S]*?\n\}/;
-    const match = backgroundCode.match(functionRegex);
-    expect(match).toBeTruthy();
-    getAndProcessClickedElementCode = match[0];
+  it('locking cancels approvals and clears decrypted state and all UI sessions', async () => {
+    const app = fixture(); const { requestId } = await app.preview();
+    await app.call('lock');
+    expect(app.controller.vault.profile).toBeNull(); expect(app.controller.pending.size).toBe(0);
+    await expect(app.call('collectPreview', { requestId })).rejects.toThrow('LOCKED');
+    expect(app.api.runtime.sendMessage).toHaveBeenCalledWith({ action: 'sessionChanged' });
   });
-
-  it('verifies clipboard flow shows feedback when no value exists', () => {
-    expect(getAndProcessClickedElementCode).toContain('shouldCopyToClipboard');
-    expect(getAndProcessClickedElementCode).toContain('No value available to copy');
-    expect(getAndProcessClickedElementCode).toMatch(/if\s*\(\s*suggestedValue\?\.closest\s*\)/);
-    expect(getAndProcessClickedElementCode).toMatch(/else[\s\S]*?No value available to copy/);
+  it('permission revocation cancels existing previews and unregisters the site', async () => {
+    const app = fixture(); const { requestId } = await app.preview();
+    await app.call('revokeSite', { origin: 'https://trusted.example' });
+    await expect(app.call('fill', { requestId, selections: [] })).rejects.toThrow('PREVIEW_EXPIRED');
+    expect(app.local.preferences.sites).toEqual(['https://frame.example']);
+    expect(app.api.scripting.unregisterContentScripts).toHaveBeenCalled();
   });
-
-  it('verifies clipboard action checks for closest value', () => {
-    expect(getAndProcessClickedElementCode).toContain('suggestedValue?.closest');
-    expect(getAndProcessClickedElementCode).toContain("action: 'copyToClipboard'");
+  it('startup erases all obsolete plaintext without reading it or touching the vault and preferences', async () => {
+    const encryptedVault = { ciphertext: 'synthetic ciphertext' };
+    const app = fixture({ local: { encryptedVault, AIFillForm: { name: 'Applicant Example' },
+      AIFillForm_backup_old_format: { name: 'Applicant Example' }, backup_timestamp: 123,
+      staticEmbeddings: { alias: [1, 2] }, settings: { model: 'old' }, aiSession: 'old metadata' },
+      sync: { AIFillForm: { name: 'Applicant Example' }, settings: { model: 'old' } },
+      session: { aiSession: 'metadata' } });
+    const status = await app.call('status');
+    expect(app.sync).toEqual({}); expect(app.session).toEqual({});
+    expect(app.local).toEqual({ encryptedVault, preferences: { sites: ['https://trusted.example', 'https://frame.example'], threshold: 0.8 } });
+    expect(app.api.storage.sync.get).not.toHaveBeenCalled();
+    expect(app.api.storage.local.get.mock.calls.map(([key]) => key)).toEqual(['encryptedVault', 'preferences']);
+    expect(status).not.toHaveProperty('legacy');
+    await expect(app.call('deleteLegacy')).rejects.toThrow('UNKNOWN_ACTION');
   });
-});
-
-describe('Fill feedback (real execution)', () => {
-  let fillFormCode;
-
-  beforeEach(() => {
-    const contentCode = readFileSync(join(process.cwd(), 'src/content.js'), 'utf-8');
-    const functionRegex = /function fillFormWithProposedValues\(formValues\)\s*\{[\s\S]*?\n\}/;
-    const match = contentCode.match(functionRegex);
-    expect(match).toBeTruthy();
-    fillFormCode = match[0];
+  it('automatically erases plaintext restored by sync or another old writer', async () => {
+    const app = fixture(); await app.call('status');
+    const onChanged = app.api.storage.onChanged.addListener.mock.calls[0][0];
+    app.sync.AIFillForm = { name: 'Applicant Example' };
+    onChanged({ AIFillForm: { newValue: app.sync.AIFillForm } }, 'sync');
+    await app.call('status'); expect(app.sync).toEqual({});
+    app.local.AIFillForm_backup_old_format = { name: 'Applicant Example' };
+    onChanged({ AIFillForm_backup_old_format: { newValue: app.local.AIFillForm_backup_old_format } }, 'local');
+    await app.call('status'); expect(app.local.AIFillForm_backup_old_format).toBeUndefined();
+    const clears = app.api.storage.sync.clear.mock.calls.length;
+    onChanged({ AIFillForm: { oldValue: { name: 'Applicant Example' } } }, 'sync');
+    onChanged({ preferences: { newValue: app.local.preferences } }, 'local');
+    await app.call('status'); expect(app.api.storage.sync.clear).toHaveBeenCalledTimes(clears);
   });
-
-  it('verifies fill count tracking exists', () => {
-    expect(fillFormCode).toContain('filledCount');
-    expect(fillFormCode).toMatch(/let\s+filledCount\s*=\s*0/);
-    expect(fillFormCode).toMatch(/filledCount\+\+/);
+  it('blocks vault operations after cleanup failure and retries without exposing plaintext', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    try {
+      const app = fixture({ cleanupFailure: true, sync: { AIFillForm: { name: 'Applicant Example' } } });
+      await expect(app.call('create', { passphrase: 'synthetic vault passphrase' })).rejects.toThrow('STORAGE_CLEANUP_FAILED');
+      expect(app.api.storage.local.set).not.toHaveBeenCalled();
+      app.api.storage.sync.clear.mockImplementation(async () => { for (const key of Object.keys(app.sync)) delete app.sync[key]; });
+      await app.call('status'); expect(app.sync).toEqual({});
+      expect(JSON.stringify(warn.mock.calls)).not.toContain('Applicant Example');
+    } finally { warn.mockRestore(); }
   });
-
-  it('verifies conditional success message based on filled count', () => {
-    expect(fillFormCode).toContain('if (filledCount > 0)');
-    expect(fillFormCode).toContain('showNotificationRibbon');
-    expect(fillFormCode).toContain('field');
-    expect(fillFormCode).toMatch(/No fields were filled/);
+  it('supports browsers without session storage', async () => {
+    const app = fixture({ noSession: true });
+    expect(await app.call('status')).toHaveProperty('preferences');
   });
-
-  it('verifies success shows actual count', () => {
-    expect(fillFormCode).toMatch(/\$\{filledCount\}/);
-    expect(fillFormCode).toMatch(/filledCount > 1.*\?.*'s'/);
+  it('clear-all covers every storage area, model cache and unlocked memory', async () => {
+    const app = fixture(); app.local.AIFillForm = 'synthetic'; app.sync.AIFillForm = 'synthetic';
+    await app.call('clearAll');
+    expect(app.local).toEqual({}); expect(app.sync).toEqual({}); expect(app.session).toEqual({});
+    expect(app.controller.vault.unlocked).toBe(false); expect(caches.delete).toHaveBeenCalledWith('model-cache');
   });
-});
-
-describe('Single-field frame targeting (real execution)', () => {
-  let getAndProcessClickedElementCode;
-
-  beforeEach(() => {
-    const backgroundCode = readFileSync(join(process.cwd(), 'src/background.js'), 'utf-8');
-    const functionRegex = /async function getAndProcessClickedElement\([\s\S]*?\n\}/;
-    const match = backgroundCode.match(functionRegex);
-    expect(match).toBeTruthy();
-    getAndProcessClickedElementCode = match[0];
+  it('initialization contains no value labels or all-site registration', async () => {
+    const app = fixture(); await app.controller.initialize();
+    expect(JSON.stringify(app.api.contextMenus.create.mock.calls)).not.toContain('Applicant Example');
+    const script = app.api.scripting.registerContentScripts.mock.calls[0][0][0];
+    expect(script.matches).toEqual(['https://trusted.example/*', 'https://frame.example/*']);
   });
-
-  it('verifies getClickedElementData targets specific frameId', () => {
-    expect(getAndProcessClickedElementCode).toContain("action: 'getClickedElementData'");
-    expect(getAndProcessClickedElementCode).toMatch(/frameId:\s*info\.frameId/);
+  it('expired previews and browser-context restart require a fresh approval and unlock', async () => {
+    const app = fixture(); const { requestId } = await app.preview();
+    app.controller.pending.get(requestId).expires = Date.now() - 1;
+    await expect(app.call('fill', { requestId, selections: [] })).rejects.toThrow('PREVIEW_EXPIRED');
+    const restarted = createController(app.api);
+    expect(restarted.vault.unlocked).toBe(false);
+    expect(restarted.pending.size).toBe(0);
   });
-
-  it('verifies fillFields targets specific frameId', () => {
-    expect(getAndProcessClickedElementCode).toMatch(/frameId:\s*info\.frameId/);
-  });
-});
-
-describe('Storage change resets initCompleted (real execution)', () => {
-  let storageChangeHandler;
-
-  beforeEach(() => {
-    const backgroundCode = readFileSync(join(process.cwd(), 'src/background.js'), 'utf-8');
-    const handlerRegex = /chrome\.storage\.onChanged\.addListener\(async \(changes, areaName\) => \{[\s\S]*?\n\}\);/;
-    const match = backgroundCode.match(handlerRegex);
-    expect(match).toBeTruthy();
-    storageChangeHandler = match[0];
-  });
-
-  it('verifies initCompleted is reset on AIFillForm change', () => {
-    expect(storageChangeHandler).toContain('initCompleted = false');
-    const aiFillFormSection = storageChangeHandler.substring(
-      storageChangeHandler.indexOf('if (key === "AIFillForm")'),
-      storageChangeHandler.indexOf('} else {')
-    );
-    expect(aiFillFormSection).toContain('initCompleted = false');
-  });
-
-  it('verifies initCompleted is reset on settings change', () => {
-    const elseSection = storageChangeHandler.substring(
-      storageChangeHandler.indexOf('} else {')
-    );
-    expect(elseSection).toContain('initCompleted = false');
-  });
-
-  it('verifies menu rebuild only on AIFillForm change', () => {
-    const aiFillFormSection = storageChangeHandler.substring(
-      storageChangeHandler.indexOf('if (key === "AIFillForm")'),
-      storageChangeHandler.indexOf('} else {')
-    );
-    expect(aiFillFormSection).toContain('await createContextMenu()');
-
-    const elseSection = storageChangeHandler.substring(
-      storageChangeHandler.indexOf('} else {')
-    );
-    expect(elseSection).not.toContain('await createContextMenu()');
-  });
-});
-
-describe('Context menu simplification (real execution)', () => {
-  let backgroundCode;
-
-  beforeEach(() => {
-    backgroundCode = readFileSync(join(process.cwd(), 'src/background.js'), 'utf-8');
-  });
-
-  it('verifies no tab lifecycle event handlers for menu rebuild', () => {
-    expect(backgroundCode).not.toContain('chrome.tabs.onActivated.addListener');
-    expect(backgroundCode).not.toContain('chrome.tabs.onUpdated.addListener');
-    expect(backgroundCode).not.toContain('chrome.tabs.onCreated.addListener');
-  });
-
-  it('verifies no autoProposal menu item', () => {
-    const createMenuRegex = /async function createContextMenu\([\s\S]*?\n\}/;
-    const match = backgroundCode.match(createMenuRegex);
-    expect(match).toBeTruthy();
-    expect(match[0]).not.toContain('id: "autoProposal"');
-    expect(match[0]).not.toContain('Turn auto proposals');
-  });
-
-  it('verifies no addModelsMenu call', () => {
-    const createMenuRegex = /async function createContextMenu\([\s\S]*?\n\}/;
-    const match = backgroundCode.match(createMenuRegex);
-    expect(match).toBeTruthy();
-    expect(match[0]).not.toContain('await addModelsMenu');
-  });
-
-  it('verifies no provider change handler in click listener', () => {
-    const clickHandlerRegex = /chrome\.contextMenus\.onClicked\.addListener\(async \(info, tab\) => \{[\s\S]*?\}\);/;
-    const match = backgroundCode.match(clickHandlerRegex);
-    expect(match).toBeTruthy();
-    expect(match[0]).not.toContain('toggleAutoProposal');
-    expect(match[0]).not.toContain('tempChamgeApiProvider');
-    expect(match[0]).not.toContain('/^api_/i.test');
-  });
-
-  it('verifies menu creation on extension install', () => {
-    const installHandlerRegex = /chrome\.runtime\.onInstalled\.addListener\(async \(details\) => \{[\s\S]*?\}\);/;
-    const match = backgroundCode.match(installHandlerRegex);
-    expect(match).toBeTruthy();
-    expect(match[0]).toContain('await createContextMenu()');
-  });
-});
-
-describe('Modal dialog replacement (real execution)', () => {
-  let contentCode;
-
-  beforeEach(() => {
-    contentCode = readFileSync(join(process.cwd(), 'src/content.js'), 'utf-8');
-  });
-
-  it('verifies showMessage is not called for user feedback', () => {
-    const showMessageCalls = contentCode.match(/showMessage\(/g) || [];
-    expect(showMessageCalls.length).toBeLessThanOrEqual(2);
-  });
-
-  it('verifies showNotificationRibbon is used for errors', () => {
-    expect(contentCode).toContain("showNotificationRibbon(`${err.message}. Please reload the page.`, 'error')");
-  });
-
-  it('verifies showNotificationRibbon is used for info messages', () => {
-    expect(contentCode).toContain("showNotificationRibbon('No fields were filled', 'info')");
-  });
-
-  it('verifies showNotificationRibbon is used for warnings', () => {
-    expect(contentCode).toContain("showNotificationRibbon('No suitable values proposed for this form.', \"warn\")");
+  it('failed page operations never echo private error text or payloads to diagnostics', async () => {
+    const app = fixture(); const { requestId } = await app.preview();
+    app.api.tabs.sendMessage.mockRejectedValueOnce(new Error('Applicant Example private request body'));
+    const logs = [vi.spyOn(console, 'log'), vi.spyOn(console, 'warn'), vi.spyOn(console, 'error')];
+    const listener = app.api.runtime.onMessage.addListener.mock.calls[0][0];
+    const reply = vi.fn();
+    listener({ action: 'collectPreview', requestId }, { id: 'fixture', url: 'moz-extension://fixture/preview.html' }, reply);
+    await vi.waitFor(() => expect(reply).toHaveBeenCalledWith({ ok: false, error: 'OPERATION_FAILED' }));
+    for (const log of logs) { expect(JSON.stringify(log.mock.calls)).not.toContain('Applicant Example'); log.mockRestore(); }
   });
 });

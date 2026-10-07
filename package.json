@@ -7,12 +7,18 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "test:ui": "vitest --ui",
-    "test:coverage": "vitest run --coverage"
+    "test:coverage": "vitest run --coverage",
+    "build": "node scripts/build.mjs",
+    "test:firefox": "node scripts/firefox-smoke.mjs"
   },
   "devDependencies": {
-    "@vitest/ui": "^2.1.8",
-    "jsdom": "^25.0.1",
-    "vitest": "^2.1.8",
-    "vitest-webextension-mock": "^0.0.7"
+    "@vitest/ui": "5.0.3",
+    "esbuild": "0.28.2",
+    "jsdom": "30.1.2",
+    "selenium-webdriver": "4.41.0",
+    "vitest": "5.0.3"
+  },
+  "dependencies": {
+    "@huggingface/transformers": "4.3.1"
   }
 }

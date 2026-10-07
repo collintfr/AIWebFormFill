@@ -1,35 +1,65 @@
-# Privacy Policy for AI Form Fill Helper Chrome Extensions
+# Privacy policy — version 2
 
-Effective Date: 26 Apr 2024
+AI Form Fill Helper stores your profile in an encrypted local vault and performs
+field matching on your device. It has no analytics or configured AI inference server.
 
-## Introduction
+**Stored information.** Values and their field-name aliases are encrypted together
+with AES-256-GCM. A passphrase-derived key uses PBKDF2-SHA-256 with 600,000 iterations
+and a random salt; each write uses a fresh IV. The extension never stores the
+passphrase or key and never writes profiles to browser sync. Approved destination
+origins and the matching threshold are plaintext local preferences. Public model
+files are cached separately. This does not encrypt browser storage generally or
+protect against compromise of an unlocked browser.
 
-This privacy policy governs the use of the software application AI Form Fill Helper ("Extension"). The Extension is designed to facilitate the automatic filling of web forms, enhancing user productivity and convenience using local AI API interface.
+**Unlocked sessions.** Decrypted values and keys exist in extension background
+memory. Preview and editing pages may also hold private values while open. Matching
+workers hold aliases and selected page metadata in memory. Locking, browser exit,
+or background eviction ends the vault session; extension pages clear their state
+when notified or when they detect the ended session. JavaScript cannot guarantee
+forensic zeroization of memory. There is no password recovery.
 
-## Disclosure
+**Page access and filling.** Access is granted for chosen sites rather than all
+websites automatically. The browser's host permission may cover more ports than
+the exact origin; the extension separately checks its exact-origin approval.
+Content scripts capture the selected field, then collect limited metadata only
+after an explicit preview command. Supported metadata is name, ID, autocomplete,
+associated label, and accessibility label. Arbitrary attributes, HTML, and field
+values are excluded. Labels and aliases can themselves contain private information;
+they are processed locally. Embedded third-party destinations need their own
+permission and approval for each preview.
 
-**Limited Use:** The user, at their own discretion, provides information that the Extension stores in browser extension storage. User data and settings are stored using the browser's sync storage mechanism, which means they may be synchronized across browser instances where the user is signed in with the same browser account. This is a convenience feature that allows users to reuse their form data across devices. The Extension itself does not collect user data for its own analytics, resale, or onward sharing.
+No focus-triggered automatic proposals exist. Proposed values appear only in an
+extension-owned preview. Clicking Fill approves disclosure to the specified
+destination. Once inserted, the website and its first-party or third-party scripts
+can read the values, even before submission. Copy is a separate explicit operation;
+the OS clipboard and clipboard history may retain that value. Learning is an
+explicit per-fill choice and saves successful field aliases back into the vault.
 
-**Financial and Payment Information:** The Extension does not handle or require any financial and payment information.
+**Network activity.** An explicit setup download retrieves fixed public model files
+from Hugging Face and allowlisted asset hosts. Those servers receive ordinary
+download information such as your IP address; requests omit credentials and
+referrers and contain no profile, aliases, or page metadata. Files are revision-pinned
+and integrity-checked. JavaScript/WASM runtime files are packaged with the extension.
+Inference never falls back to remote models or services. Ordinary browser traffic,
+extension distribution/update services, and destination websites have their own policies.
 
-**Authentication Information:** The Extension does not require or collect any authentication information.
+**Backups.** Only encrypted vault backups are supported. Import verifies the
+passphrase and authenticated contents before replacing the current vault. Plaintext
+imports and exports are rejected. Encrypted backup files may be retained by your
+downloads directory, file backups, or other software outside the extension.
 
-**User Data:** The Extension accesses web form field data only when explicitly triggered by the user through extension commands, solely for the purpose of filling out forms. The Extension does not independently collect, retain, sell, or share that data with third parties. However, if the user configures an external embeddings or AI endpoint, relevant field metadata may be sent to that user-selected service in order to generate similarity matches and proposals. In such cases, transmission happens because of the user's configuration choice, and the data handling practices of that external service are outside the Extension's control. The provided data is otherwise used exclusively to execute the core functionality of filling forms.
+**Deletion and upgrades.** Legacy version 1 plaintext profiles and migration backups
+are automatically erased at every background startup, together with old alias
+caches, settings, and sync/session storage. Restored old data triggers automatic
+cleanup again. There is no conversion or manual legacy-data feature. Cleanup
+preserves the encrypted vault and its preferences and public model cache; vault
+operations are blocked until cleanup succeeds. Clear all personal data removes extension local/sync/session storage,
+model caches, preferences, and active decrypted state. Reset editor does not delete
+persisted data. These are logical deletion actions, not guarantees of forensic
+disk erasure. They cannot erase previous exports, clipboard history, captured logs,
+other synced-device copies, or existing browser/profile backups.
 
-## Permissions and Security
-
-**Permissions:** Permissions required by the Extension are minimal and only intended to enable its core functionalities such as accessing active tabs to input or modify form data. The Extension asks for user consent before accessing any content.
-
-**Security Measures:** The Extension uses standard browser extension storage mechanisms to store user data. The browser's sync storage provides the same level of protection as other browser-synced data and may make stored settings/data accessible across devices signed in with the same browser account. If the user configures a non-local or non-secure (`http://`) external endpoint, form metadata sent to that endpoint may leave the local device and may not be encrypted in transit. Users should review and trust any external service they configure.
-
-## User Control and Rights
-
-Users have the ability to access, update, or delete their stored data within the Extension at any time through its settings. Users are encouraged to manage their data effectively to ensure privacy and security.
-
-## Changes to This Privacy Policy
-
-Ivo Stoykov reserves the right to update or change this policy at any time. Updates will be posted on this page and users are encouraged to review the policy periodically to stay informed of any changes.
-
-## Contact Information
-
-For questions or concerns about this privacy policy or the Extension's data practices, [please contact](https://github.com/ivostoykov/AIWebFormFill/issues).
+**Diagnostics.** Extension diagnostics use fixed action/error codes rather than
+profile values, DOM objects, aliases, endpoint URLs, or request/response bodies.
+No diagnostic upload is implemented. Review [DESIGN.md](../DESIGN.md) and the
+[security audit](../SECURITY_AUDIT.md) for the implementation boundaries and limitations.
